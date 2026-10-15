@@ -170,3 +170,29 @@ code {
     display: none;
   }
 }
+
+/* App-wide layout overrides for the upcoming downloader screen. */
+html,
+body,
+#root {
+  width: 100%;
+  min-width: 680px;
+  min-height: 100%;
+}
+
+body {
+  display: block;
+  overflow: auto;
+  background-color: var(--color-background);
+  background-image: none;
+  user-select: auto;
+}
+
+#root {
+  display: flex;
+  min-height: 100vh;
+  margin: 0;
+  align-items: stretch;
+  justify-content: flex-start;
+  flex-direction: column;
+}

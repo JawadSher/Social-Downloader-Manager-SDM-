@@ -494,11 +494,11 @@ the project owner confirmed the app launches after these changes.
 
 ### Step 2.1 --- Design tokens and themes
 
--   [ ] Define typography, spacing, radii, borders, surfaces, and status
+-   [x] Define typography, spacing, radii, borders, surfaces, and status
     colors.
--   [ ] Add light theme.
--   [ ] Add dark theme.
--   [ ] Add optional system theme.
+-   [x] Add light theme.
+-   [x] Add dark theme.
+-   [x] Add optional system theme tokens.
 -   [ ] Add a simple theme toggle in the main UI.
 -   [ ] Persist only the theme preference if necessary; no database.
 -   [ ] Verify contrast, focus states, and keyboard accessibility.
@@ -996,8 +996,8 @@ Mark tasks complete only after they are implemented and verified.
 -   [ ] Phase 13 --- Windows packaging and release
 
 **Last completed phase:** Phase 0 --- Scope and dependency checks\
-**Current task:** Phase 1 --- Project setup (dependency pinning and lockfile commit pending)\
-**Next action:** Pin direct dependency versions and include the updated lockfile in the next project commit, then continue to Phase 2 --- UI shell and theme.
+**Current task:** Phase 2 --- UI shell and theme (design tokens and theme styles added; renderer component and visual verification pending)\
+**Next action:** Generate the `App.tsx` UI shell using the supplied prompt, then run the app and verify themes, focus visibility, and keyboard use. Phase 1 dependency pinning and lockfile commit also remain pending.
 
 ------------------------------------------------------------------------
 
