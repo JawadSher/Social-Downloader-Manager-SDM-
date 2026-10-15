@@ -523,16 +523,21 @@ has no fake production download logic.
 
 ### Step 3.1 --- Define shared contracts
 
--   [ ] `DetectedPlatform`
--   [ ] `MediaInfo`
--   [ ] `MediaFormat`
--   [ ] `PlaylistInfo` / playlist entry types where applicable
--   [ ] `OutputMode`
--   [ ] `DownloadRequest`
--   [ ] `DownloadProgress`
--   [ ] `DownloadResult`
--   [ ] `AppError`
--   [ ] Runtime schemas for URL and option validation.
+-   [x] `DetectedPlatform`
+-   [x] `MediaInfo`
+-   [x] `MediaFormat`
+-   [x] `PlaylistInfo` / playlist entry types where applicable
+-   [x] `OutputMode`
+-   [x] `DownloadRequest`
+-   [x] `DownloadProgress`
+-   [x] `DownloadResult`
+-   [x] `AppError`
+-   [x] Runtime schemas for URL and option validation.
+
+Implemented in `src/shared/contracts.ts` and `src/shared/schemas.ts`;
+both Electron and renderer TypeScript configurations include the shared
+types. Typecheck and production build passed. IPC integration and
+destination-path authorization remain in later Phase 3 steps.
 
 ### Step 3.2 --- Define narrow preload methods
 
@@ -996,8 +1001,8 @@ Mark tasks complete only after they are implemented and verified.
 -   [ ] Phase 13 --- Windows packaging and release
 
 **Last completed phase:** Phase 0 --- Scope and dependency checks\
-**Current task:** Phase 2 --- UI shell and theme (supplied light/dark palette integrated; visual theme and accessibility review pending)\
-**Next action:** Run `npm run dev` and check Light, Dark, and System against the supplied palette, then verify focus visibility and keyboard use. Phase 1 dependency pinning and lockfile commit also remain pending.
+**Current task:** Phase 2 --- UI shell and theme (screen styling repaired; visual theme and accessibility review pending)\
+**Next action:** Run `npm run dev` and check Light, Dark, and System against the supplied palette, then verify focus visibility and keyboard use. Phase 1 dependency pinning and lockfile commit also remain pending. Shared contracts for Phase 3.1 are implemented; continue with Step 3.2 after Phase 2 review.
 
 ------------------------------------------------------------------------
 
