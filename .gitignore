@@ -27,3 +27,9 @@ Thumbs.db
 coverage/
 playwright-report/
 test-results/
+
+node_modules
+dist
+out
+.eslintcache
+*.log*
