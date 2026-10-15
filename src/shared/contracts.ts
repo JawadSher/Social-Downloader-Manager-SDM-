@@ -31,11 +31,15 @@ export type PlaylistInfo = {
   title: string | null
   entryCount: number | null
   entries: PlaylistEntry[]
+  entriesTruncated: boolean
 }
+
+export type MediaContentType = 'single' | 'playlist' | 'unknown'
 
 export type MediaInfo = {
   id: string | null
   webpageUrl: string
+  contentType: MediaContentType
   platform: DetectedPlatform | null
   title: string
   description: string | null
@@ -44,6 +48,7 @@ export type MediaInfo = {
   durationSeconds: number | null
   playlist: PlaylistInfo | null
   formats: MediaFormat[]
+  formatsTruncated: boolean
 }
 
 export type OutputMode = 'video-audio' | 'audio-only' | 'video-only' | 'best-available'
@@ -89,6 +94,7 @@ export type AppErrorCode =
   | 'invalid-url'
   | 'unsupported-url'
   | 'media-unavailable'
+  | 'media-inspection-failed'
   | 'authentication-required'
   | 'network-error'
   | 'format-unavailable'

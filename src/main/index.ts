@@ -3,10 +3,13 @@ import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
+import type { AppError } from '../shared/contracts'
 import { IPC_CHANNELS } from '../shared/ipc-channels'
-import { parseNoArgs } from './ipc/validators'
+import { parseInspectionArgs, parseNoArgs, parseRequestIdArgs } from './ipc/validators'
 import { registerIpcHandler } from './ipc/register-handler'
 import { checkYtDlpAvailability } from './services/media/binary-availability'
+import { inspectMedia, MediaInspectionError } from './services/media/media-inspector'
+import { cancelYtDlp, YtDlpProcessError } from './services/media/ytdlp-service'
 
 function isInternalUrl(candidate: string): boolean {
   const devUrl = process.env['ELECTRON_RENDERER_URL']
@@ -29,6 +32,42 @@ function openExternalHttpUrl(candidate: string): void {
     }
   } catch {
     // Ignore malformed URLs from renderer content.
+  }
+}
+
+function mapInspectionError(error: unknown): AppError {
+  if (error instanceof YtDlpProcessError) {
+    if (error.code === 'cancelled') {
+      return { code: 'cancelled', message: 'Media inspection was cancelled.', retryable: false }
+    }
+    if (error.code === 'timeout') {
+      return {
+        code: 'network-error',
+        message: 'Media inspection timed out. Check your connection and try again.',
+        retryable: true
+      }
+    }
+    if (error.code === 'spawn-failed') {
+      return {
+        code: 'internal-error',
+        message: 'yt-dlp could not be started. Restart the app and try again.',
+        retryable: true
+      }
+    }
+  }
+
+  if (error instanceof MediaInspectionError) {
+    return {
+      code: 'media-inspection-failed',
+      message: 'yt-dlp returned media information the app could not read.',
+      retryable: true
+    }
+  }
+
+  return {
+    code: 'media-inspection-failed',
+    message: 'This link could not be inspected. Check that it is accessible and try again.',
+    retryable: true
   }
 }
 
@@ -105,10 +144,24 @@ app.whenReady().then(async () => {
 
   registerIpcHandler(
     IPC_CHANNELS.appGetVersion,
-    (event) =>
-      event.senderFrame === event.sender.mainFrame && isInternalUrl(event.senderFrame.url),
+    (event) => event.senderFrame === event.sender.mainFrame && isInternalUrl(event.senderFrame.url),
     parseNoArgs,
     () => app.getVersion()
+  )
+  registerIpcHandler(
+    IPC_CHANNELS.mediaInspectUrl,
+    (event) => event.senderFrame === event.sender.mainFrame && isInternalUrl(event.senderFrame.url),
+    parseInspectionArgs,
+    inspectMedia,
+    mapInspectionError
+  )
+  registerIpcHandler(
+    IPC_CHANNELS.mediaCancelInspection,
+    (event) => event.senderFrame === event.sender.mainFrame && isInternalUrl(event.senderFrame.url),
+    parseRequestIdArgs,
+    (requestId) => {
+      cancelYtDlp(requestId)
+    }
   )
 
   createWindow()

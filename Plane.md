@@ -505,14 +505,15 @@ the project owner confirmed the app launches after these changes.
 
 ### Step 2.2 --- Main screen
 
--   [ ] Create a clear URL input area.
--   [ ] Add Paste and Inspect buttons.
--   [ ] Add a loading state for URL inspection.
--   [ ] Add a media preview card placeholder.
--   [ ] Add output mode and format-selection areas.
--   [ ] Add a download progress area.
--   [ ] Add clear empty, success, and error states.
--   [ ] Keep the UI uncluttered and avoid unnecessary pages.
+-   [x] Create a clear URL input area.
+-   [x] Add Paste and Inspect buttons.
+-   [x] Add a loading state for URL inspection.
+-   [x] Add a media preview card placeholder.
+-   [x] Add output mode and format-selection areas (selection remains
+    disabled until format-selection behavior is implemented).
+-   [x] Add a download progress area.
+-   [x] Add clear empty, success, and error states for inspection.
+-   [x] Keep the UI uncluttered and avoid unnecessary pages.
 
 **Acceptance criteria:** The shell works in light/dark/system themes and
 has no fake production download logic.
@@ -555,9 +556,10 @@ The typed `window.sdm` façade and fixed channel names are defined in
 `src/shared/preload-api.ts`, `src/shared/ipc-channels.ts`, and
 `src/preload/index.ts`. Progress/status subscriptions return cleanup
 functions. Inspection accepts a request ID so cancellation can target
-the correct request. Only `app.getVersion()` has a main-process handler
-at this stage; other handlers require the validation and service work
-in subsequent steps and must not be treated as operational yet.
+the correct request. `app.getVersion()`, `media.inspectUrl()`, and
+`media.cancelInspection()` have trusted main-process handlers. Download,
+save-dialog, and file operations remain unavailable until their services
+and handlers are implemented.
 
 Do not expose unrestricted filesystem access or arbitrary process
 execution to the renderer. Add unsubscribe functions for event
@@ -580,7 +582,9 @@ structured errors without exposing internal exception details. The
 download validator requires caller-supplied inspected formats and an
 output-path authorization check; those checks must be connected to the
 inspection and native Save dialog state when the corresponding handlers
-are implemented. Only the version handler is registered today.
+are implemented. The version, URL-inspection, and inspection-cancellation
+handlers are registered; download, Save dialog, and file-operation handlers
+are still pending.
 
 **Acceptance criteria:** Unit tests reject invalid URLs/options and
 verify that only approved IPC actions are available.
@@ -593,38 +597,65 @@ verify that only approved IPC actions are available.
 
 -   [x] Add a documented local development path for `yt-dlp.exe`.
 -   [ ] Include FFmpeg/ffprobe only from verified sources when required.
--   [ ] Check executable availability and version at startup.
--   [ ] Show a helpful error if a required binary is missing.
+-   [x] Check executable availability and version at startup.
+-   [x] Show a helpful error if a required binary is missing.
 -   [x] Do not download executable files silently at runtime.
 
 Startup availability/version checking and the missing-binary warning are
 implemented in `src/main/services/media/binary-availability.ts` and
-`src/main/index.ts`. The owner should relaunch the app once to confirm the
-local executable passes the new startup check; those two checks remain
-open until that runtime confirmation. FFmpeg/ffprobe are not present and
-will remain out until a verified build is needed for a selected mode.
+`src/main/index.ts`. The owner reports that `yt-dlp.exe --version` returns
+`2025.12.08` and confirmed the app starts without the missing-binary warning.
+The owner also reports
+an FFmpeg 9.0 GPL candidate under
+`resources/binaries/win32-x64/ffmpeg-n9.0-latest-win64-gpl-9.0/bin/` with
+`ffmpeg.exe`, `ffprobe.exe` (the user called it “ffmprobe”), and `ffplay.exe`.
+Local file sizes, hashes, and the bundled GPLv3 license text are recorded
+in `resources/THIRD_PARTY_NOTICES.md`. The candidate's exact upstream
+provenance/checksum and runtime version/configuration remain unverified;
+do not package it yet. It is not wired into the app because no implemented
+mode requires it at this stage.
 
 ### Step 4.2 --- Process wrapper
 
--   [ ] Implement `ytdlp-service.ts`.
--   [ ] Use `spawn` with an argument array.
--   [ ] Capture stdout/stderr safely with size limits.
--   [ ] Handle exit codes, spawn errors, timeout, and cancellation.
--   [ ] Redact sensitive query parameters from logs.
--   [ ] Avoid duplicate inspection processes for the same request.
+-   [x] Implement `ytdlp-service.ts`.
+-   [x] Use `spawn` with an argument array.
+-   [x] Capture stdout/stderr safely with size limits.
+-   [x] Handle exit codes, spawn errors, timeout, and cancellation.
+-   [x] Redact sensitive query parameters from diagnostics; process
+    arguments and structured stdout are not logged.
+-   [x] Avoid duplicate processes for the same request ID and arguments.
+
+`src/main/services/media/ytdlp-service.ts` provides a main-process wrapper
+with fixed executable resolution, bounded output, a bounded timeout,
+request-scoped cancellation, and de-duplication. It is ready for the
+inspection service in Step 4.3; no IPC handler invokes it yet. The app
+startup check was confirmed by the owner. `npm run build` passed, including
+both TypeScript projects; the full test suite was not run in this step.
 
 ### Step 4.3 --- Inspect metadata and formats
 
--   [ ] Use yt-dlp's structured JSON output in information-only mode.
--   [ ] Parse output defensively.
--   [ ] Normalize title, thumbnail, uploader/channel, duration, webpage
+-   [x] Use yt-dlp's structured JSON output in information-only mode.
+-   [x] Parse output defensively.
+-   [x] Normalize title, thumbnail, uploader/channel, duration, webpage
     URL, extractor/site name, playlist data, and formats when available.
--   [ ] Normalize resolution, extension, FPS, audio/video presence,
+-   [x] Normalize resolution, extension, FPS, audio/video presence,
     codecs, and file size when available.
--   [ ] Handle missing values and incomplete extractor responses.
--   [ ] Support single media URLs and playlists where the extractor
+-   [x] Handle missing values and incomplete extractor responses.
+-   [x] Support single media URLs and playlists where the extractor
     reports them.
--   [ ] Allow the user to cancel inspection.
+-   [x] Allow the user to cancel inspection.
+
+Implemented in `src/main/services/media/media-inspector.ts` and wired to
+the existing validated preload methods from `src/main/index.ts`. Inspection
+uses yt-dlp JSON output with downloads skipped and user config ignored;
+flat playlist results are capped at 500 entries and normalized formats at
+1,000, with truncation flags. `npm run build` passed, including both
+TypeScript configurations. The project owner confirmed a supported
+YouTube URL displays its thumbnail, title, duration, and available format
+details. Invalid or unsupported-link behavior and cancellation have not
+yet been manually verified. The renderer is connected to the inspection
+API and displays the returned preview; download and format selection
+remain later steps.
 
 **Acceptance criteria:** Supported test URL produces preview data and
 formats without downloading the full media. Invalid and unsupported test
@@ -636,25 +667,42 @@ URLs show useful errors.
 
 ### Step 5.1 --- Identify the platform
 
--   [ ] Use yt-dlp's extractor information as the source of truth.
--   [ ] Show the platform/site name only when returned or reliably
+-   [x] Use yt-dlp's extractor information as the source of truth.
+-   [x] Show the platform/site name only when returned or reliably
     inferred from the extractor result.
--   [ ] Do not maintain a static list as the only support mechanism;
+-   [x] Do not maintain a static list as the only support mechanism;
     extractor support changes over time.
--   [ ] Show a neutral fallback if the site cannot be identified.
--   [ ] Separate "platform identified" from "media extraction
+-   [x] Show a neutral fallback if the site cannot be identified.
+-   [x] Separate "platform identified" from "media extraction
     succeeded."
+
+Implemented in `media-inspector.ts` using yt-dlp's `extractor_key` and
+`extractor` fields. The renderer displays the returned platform name, or a
+neutral message when extraction succeeds without platform fields. The
+owner confirmed the inspection flow works for an accessible YouTube URL.
 
 ### Step 5.2 --- Identify media type
 
--   [ ] Distinguish a single item from a playlist/multi-item URL where
+-   [x] Distinguish a single item from a playlist/multi-item URL where
     possible.
--   [ ] Show playlist title and entry count if supplied.
+-   [x] Show playlist title and entry count if supplied.
 -   [ ] Let the user choose a single entry or the full playlist when
-    supported.
--   [ ] Explain when playlist information is unavailable.
--   [ ] Avoid automatically enqueueing a huge playlist without
+    supported. Deferred until the selected scope can be carried into a
+    real download request.
+-   [x] Explain when playlist information is unavailable.
+-   [x] Avoid automatically enqueueing a huge playlist without
     confirmation.
+
+`MediaInfo.contentType` now reports `single`, `playlist`, or `unknown`
+from yt-dlp's structured extractor result. The preview displays playlist
+title/count and up to eight returned entries, with clear messages when
+entry details are missing or the type cannot be confirmed. Inspection
+still never queues or downloads media. Entry/full-playlist selection is
+deliberately deferred until it can be connected to the download request.
+`npm.cmd run build` passed, including both TypeScript configurations and
+the Electron Vite production build. Project-wide lint remains failing on
+existing errors in IPC validators, shared schemas, and UI components;
+manual playlist URL verification remains open.
 
 ### Step 5.3 --- Classify errors
 
@@ -1024,8 +1072,8 @@ Mark tasks complete only after they are implemented and verified.
 -   [ ] Phase 13 --- Windows packaging and release
 
 **Last completed phase:** Phase 0 --- Scope and dependency checks\
-**Current task:** Phase 4.1 --- Binary availability (startup version check and warning implemented; runtime confirmation pending)\
-**Next action:** Relaunch the app and confirm the existing `yt-dlp.exe` passes the startup check; keep FFmpeg/ffprobe out until a verified build is needed. Phase 3.3 still needs handler integration and acceptance tests; Phase 2 needs inspection loading/success/error states; Phase 1 dependency pinning, lockfile commit, and project-license decision remain pending.
+**Current task:** Phase 5.2 --- Identify media type (playlist scope selection remains deferred until the download request can carry it)\
+**Next action:** Verify playlist, single-item, and unknown-content inspection cases in the running app, then connect playlist scope and entry selection when implementing the download request. Phase 4.3 still needs manual invalid/unsupported-link and cancellation checks. Before FFmpeg integration/packaging, verify the local candidate's runtime version/configuration and match its provenance and checksums to an upstream release. Phase 3.3 still needs download/Save dialog/file handler integration and acceptance tests; Phase 1 dependency pinning, lockfile commit, and project-license decision remain pending.
 
 ------------------------------------------------------------------------
 

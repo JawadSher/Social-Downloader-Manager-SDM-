@@ -13,7 +13,8 @@ export function registerIpcHandler<Args extends unknown[], Result>(
   channel: InvokeChannel,
   isTrustedSender: (event: IpcMainInvokeEvent) => boolean,
   parseArgs: ArgumentParser<Args>,
-  handler: (...args: Args) => Result | Promise<Result>
+  handler: (...args: Args) => Result | Promise<Result>,
+  mapError?: (error: unknown) => AppError
 ): void {
   ipcMain.handle(channel, async (event, ...args: unknown[]): Promise<OperationResult<Result>> => {
     if (!isTrustedSender(event)) {
@@ -35,7 +36,13 @@ export function registerIpcHandler<Args extends unknown[], Result>(
 
     try {
       return { success: true, data: await handler(...parsed.data) }
-    } catch {
+    } catch (error) {
+      try {
+        if (mapError) return errorResult(mapError(error))
+      } catch {
+        // Fall through to the generic error so mapper failures never leak details.
+      }
+
       return errorResult({
         code: 'internal-error',
         message: 'The request could not be completed.',
