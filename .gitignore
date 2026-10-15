@@ -33,4 +33,4 @@ dist
 out
 .eslintcache
 *.log*
-resources/binaries*
+/resources/binaries/
