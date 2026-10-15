@@ -461,28 +461,32 @@ checksum comparison remain a packaging prerequisite.
 
 ### Step 1.2 --- Initialize Electron + React
 
--   [ ] Use a maintained Electron/Vite/React/TypeScript starter.
--   [ ] Install Tailwind CSS using current compatible instructions.
--   [ ] Enable TypeScript strict mode.
--   [ ] Configure lint, format, typecheck, test, and build scripts.
+-   [x] Use a maintained Electron/Vite/React/TypeScript starter
+    (`@quick-start/electron` React + TypeScript template).
+-   [x] Install Tailwind CSS using current compatible instructions (Tailwind Vite plugin).
+-   [x] Enable TypeScript strict mode.
+-   [x] Configure lint, format, typecheck, test, and build scripts.
 -   [ ] Commit the lockfile and pin dependency versions.
--   [ ] Confirm the app opens on Windows.
+-   [x] Confirm the app opens on Windows (confirmed by project owner).
 
 **Acceptance criteria:** Empty app launches; lint, typecheck, and build
-pass.
+pass. Windows launch confirmed by project owner; lint, typecheck, and
+build passed after Tailwind setup. Lockfile is present; dependency
+version pinning and committing the lockfile remain pending.
 
 ### Step 1.3 --- Configure Electron securely
 
--   [ ] Add main and preload entry points.
--   [ ] Enable context isolation.
--   [ ] Disable Node integration in the renderer.
--   [ ] Add a restrictive Content Security Policy.
--   [ ] Expose only typed, narrow preload methods.
--   [ ] Restrict external links and new windows.
--   [ ] Document allowed IPC channels.
+-   [x] Add main and preload entry points.
+-   [x] Enable context isolation.
+-   [x] Disable Node integration in the renderer.
+-   [x] Add a restrictive Content Security Policy.
+-   [x] Expose only typed, narrow preload methods.
+-   [x] Restrict external links and new windows.
+-   [x] Document allowed IPC channels.
 
 **Acceptance criteria:** React UI runs without direct Node access and
-can call one test IPC method safely.
+can call one test IPC method safely. Static typecheck/build passed and
+the project owner confirmed the app launches after these changes.
 
 ------------------------------------------------------------------------
 
@@ -992,8 +996,8 @@ Mark tasks complete only after they are implemented and verified.
 -   [ ] Phase 13 --- Windows packaging and release
 
 **Last completed phase:** Phase 0 --- Scope and dependency checks\
-**Current task:** Phase 1 --- Project setup (Step 1.2)\
-**Next action:** Initialize the Electron + React app with the selected Vite/TypeScript starter and secure defaults.
+**Current task:** Phase 1 --- Project setup (dependency pinning and lockfile commit pending)\
+**Next action:** Pin direct dependency versions and include the updated lockfile in the next project commit, then continue to Phase 2 --- UI shell and theme.
 
 ------------------------------------------------------------------------
 

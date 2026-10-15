@@ -1,8 +1,13 @@
-import { ElectronAPI } from '@electron-toolkit/preload'
+export interface SdmApi {
+  app: {
+    getVersion(): Promise<string>
+  }
+}
 
 declare global {
   interface Window {
-    electron: ElectronAPI
-    api: unknown
+    sdm: SdmApi
   }
 }
+
+export {}

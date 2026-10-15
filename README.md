@@ -2,7 +2,7 @@
 
 A Windows-first media downloader built with **Electron, React, TypeScript, yt-dlp, and FFmpeg**. Inspect supported media URLs, choose your preferred output format and quality, and download media through a clean, native desktop experience.
 
-> **Project status:** Early development. The application scaffold is in place, but dependencies and the complete download workflow have not yet been verified.
+> **Project status:** Early development. Dependencies are installed and the Windows development app has launched successfully. The media inspection and download workflow is still to be built.
 
 ## Overview
 
@@ -64,7 +64,7 @@ Website compatibility depends on yt-dlp's extractors, source-site changes, netwo
 
 Install the following before starting development:
 
-- [Node.js](https://nodejs.org/) — use a version supported by the project dependencies.
+- [Node.js](https://nodejs.org/) — version 22.12 or newer, as required by the current Electron toolchain.
 - npm — included with Node.js.
 - [Git](https://git-scm.com/) — for version control.
 
@@ -91,19 +91,20 @@ Start the development server:
 npm run dev
 ```
 
-**Note:** The scaffold's development workflow and required dependencies have not yet been verified. The commands above should be confirmed against the current project configuration.
+**Note:** `npm run dev` has been confirmed to launch the app on Windows. The full media download workflow is not implemented yet.
 
 ## Available Commands
 
-The current scaffold defines the following checks:
+The current project defines these scripts:
 
 ```powershell
 npm run lint
 npm run typecheck
+npm test
 npm run build
 ```
 
-These commands should be run after dependencies are installed. A test script and Tailwind CSS setup are still part of the project setup work.
+Lint, typecheck, and production build have passed after the Tailwind setup. The Vitest test command is configured; automated tests will be added with the relevant application logic.
 
 ## Documentation
 

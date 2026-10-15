@@ -1,7 +1,34 @@
 import { app, shell, BrowserWindow, ipcMain } from 'electron'
-import { join } from 'path'
+import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
+
+const appVersionChannel = 'app:get-version'
+
+function isInternalUrl(candidate: string): boolean {
+  const devUrl = process.env['ELECTRON_RENDERER_URL']
+  if (is.dev && devUrl) {
+    try {
+      return new URL(candidate).origin === new URL(devUrl).origin
+    } catch {
+      return false
+    }
+  }
+
+  return candidate === pathToFileURL(join(__dirname, '../renderer/index.html')).href
+}
+
+function openExternalHttpUrl(candidate: string): void {
+  try {
+    const url = new URL(candidate)
+    if (url.protocol === 'https:' || url.protocol === 'http:') {
+      void shell.openExternal(url.href).catch(() => undefined)
+    }
+  } catch {
+    // Ignore malformed URLs from renderer content.
+  }
+}
 
 function createWindow(): void {
   // Create the browser window.
@@ -13,7 +40,9 @@ function createWindow(): void {
     ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: false
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true
     }
   })
 
@@ -21,17 +50,23 @@ function createWindow(): void {
     mainWindow.show()
   })
 
-  mainWindow.webContents.setWindowOpenHandler((details) => {
-    shell.openExternal(details.url)
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    openExternalHttpUrl(url)
     return { action: 'deny' }
   })
+
+  const preventUntrustedNavigation = (event: Electron.Event, url: string): void => {
+    if (!isInternalUrl(url)) event.preventDefault()
+  }
+  mainWindow.webContents.on('will-navigate', preventUntrustedNavigation)
+  mainWindow.webContents.on('will-redirect', preventUntrustedNavigation)
 
   // HMR for renderer base on electron-vite cli.
   // Load the remote URL for development or the local html file for production.
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
-    mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
+    void mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
   } else {
-    mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
+    void mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }
 }
 
@@ -40,7 +75,7 @@ function createWindow(): void {
 // Some APIs can only be used after this event occurs.
 app.whenReady().then(() => {
   // Set app user model id for windows
-  electronApp.setAppUserModelId('com.electron')
+  electronApp.setAppUserModelId('com.sdm.social-downloader-manager')
 
   // Default open or close DevTools by F12 in development
   // and ignore CommandOrControl + R in production.
@@ -49,8 +84,7 @@ app.whenReady().then(() => {
     optimizer.watchWindowShortcuts(window)
   })
 
-  // IPC test
-  ipcMain.on('ping', () => console.log('pong'))
+  ipcMain.handle(appVersionChannel, () => app.getVersion())
 
   createWindow()
 
