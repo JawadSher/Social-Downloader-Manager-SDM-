@@ -12,4 +12,6 @@ The project owner confirms the locally supplied `yt-dlp.exe` was downloaded from
 
 For yt-dlp, the source is the official [yt-dlp GitHub releases](https://github.com/yt-dlp/yt-dlp/releases). Before packaging, pin the exact release and review its bundled third-party license notices and checksum record for the selected Windows executable.
 
+During local development, place the Windows x64 executable at `resources/binaries/win32-x64/yt-dlp.exe`. The app checks for the file and runs `yt-dlp.exe --version` at startup with a short timeout; it never downloads or updates the executable at runtime. A packaged build resolves the binary from Electron Builder's unpacked `resources/binaries/win32-x64` directory. FFmpeg and ffprobe remain optional until a selected download mode requires merging, conversion, or probing; do not add them until their exact build and redistribution notices have been reviewed.
+
 FFmpeg's official project publishes source and documents its LGPL/GPL build conditions. Its download page points to Windows builds by BtbN and gyan.dev. The current candidate is the BtbN Windows builds published on GitHub; inspect the selected build configuration and notices before use, and only choose a configuration whose licensing obligations the project can meet. Record the exact release and checksum before bundling.

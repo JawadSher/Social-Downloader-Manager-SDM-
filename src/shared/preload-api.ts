@@ -29,6 +29,6 @@ export interface SdmApi {
     openFolder(path: string): Promise<OperationResult<void>>
   }
   app: {
-    getVersion(): Promise<string>
+    getVersion(): Promise<OperationResult<string>>
   }
 }

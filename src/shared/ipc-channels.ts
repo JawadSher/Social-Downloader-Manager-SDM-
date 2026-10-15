@@ -10,3 +10,16 @@ export const IPC_CHANNELS = {
   filesOpenFile: 'files:open-file',
   filesOpenFolder: 'files:open-folder'
 } as const
+
+export const INVOKE_CHANNELS = [
+  IPC_CHANNELS.appGetVersion,
+  IPC_CHANNELS.mediaInspectUrl,
+  IPC_CHANNELS.mediaCancelInspection,
+  IPC_CHANNELS.downloadsChooseSavePath,
+  IPC_CHANNELS.downloadsStart,
+  IPC_CHANNELS.downloadsCancel,
+  IPC_CHANNELS.filesOpenFile,
+  IPC_CHANNELS.filesOpenFolder
+] as const
+
+export type InvokeChannel = (typeof INVOKE_CHANNELS)[number]

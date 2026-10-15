@@ -1,9 +1,12 @@
-import { app, shell, BrowserWindow, ipcMain } from 'electron'
+import { app, dialog, shell, BrowserWindow } from 'electron'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { IPC_CHANNELS } from '../shared/ipc-channels'
+import { parseNoArgs } from './ipc/validators'
+import { registerIpcHandler } from './ipc/register-handler'
+import { checkYtDlpAvailability } from './services/media/binary-availability'
 
 function isInternalUrl(candidate: string): boolean {
   const devUrl = process.env['ELECTRON_RENDERER_URL']
@@ -72,7 +75,7 @@ function createWindow(): void {
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   // Set app user model id for windows
   electronApp.setAppUserModelId('com.sdm.social-downloader-manager')
 
@@ -83,7 +86,30 @@ app.whenReady().then(() => {
     optimizer.watchWindowShortcuts(window)
   })
 
-  ipcMain.handle(IPC_CHANNELS.appGetVersion, () => app.getVersion())
+  const ytDlp = await checkYtDlpAvailability()
+  if (!ytDlp.available) {
+    const reason =
+      ytDlp.error === 'not-found'
+        ? 'The executable was not found.'
+        : ytDlp.error === 'not-a-file'
+          ? 'The configured path is not a file.'
+          : 'The executable could not return its version.'
+
+    await dialog.showMessageBox({
+      type: 'warning',
+      title: 'yt-dlp is unavailable',
+      message: 'Media inspection and downloads require yt-dlp.exe.',
+      detail: `${reason}\nExpected location:\n${ytDlp.path}`
+    })
+  }
+
+  registerIpcHandler(
+    IPC_CHANNELS.appGetVersion,
+    (event) =>
+      event.senderFrame === event.sender.mainFrame && isInternalUrl(event.senderFrame.url),
+    parseNoArgs,
+    () => app.getVersion()
+  )
 
   createWindow()
 

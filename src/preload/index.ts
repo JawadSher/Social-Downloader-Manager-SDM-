@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { DownloadProgress, DownloadStatus } from '../shared/contracts'
+import type { DownloadProgress, DownloadStatus, OperationResult } from '../shared/contracts'
 import { IPC_CHANNELS } from '../shared/ipc-channels'
 import type { SdmApi } from '../shared/preload-api'
 
@@ -39,7 +39,8 @@ const sdmApi: SdmApi = {
     openFolder: (path: string) => ipcRenderer.invoke(IPC_CHANNELS.filesOpenFolder, path)
   },
   app: {
-    getVersion: (): Promise<string> => ipcRenderer.invoke(IPC_CHANNELS.appGetVersion)
+    getVersion: (): Promise<OperationResult<string>> =>
+      ipcRenderer.invoke(IPC_CHANNELS.appGetVersion)
   }
 }
 

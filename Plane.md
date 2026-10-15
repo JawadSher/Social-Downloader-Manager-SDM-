@@ -565,13 +565,22 @@ listeners.
 
 ### Step 3.3 --- Validate IPC
 
--   [ ] Validate URL and protocol.
--   [ ] Validate format IDs against the formats returned for the
+-   [x] Validate URL and protocol.
+-   [x] Validate format IDs against the formats returned for the
     inspected URL.
--   [ ] Validate output mode and extension.
--   [ ] Validate selected save path and filename.
--   [ ] Reject malformed or oversized input.
--   [ ] Return consistent structured errors.
+-   [x] Validate output mode and extension.
+-   [x] Validate selected save path and filename.
+-   [x] Reject malformed or oversized input.
+-   [x] Return consistent structured errors.
+
+Main-process validators are in `src/main/ipc/validators.ts`. The shared
+handler wrapper in `src/main/ipc/register-handler.ts` checks that calls
+come from the trusted main frame, validates argument lists, and returns
+structured errors without exposing internal exception details. The
+download validator requires caller-supplied inspected formats and an
+output-path authorization check; those checks must be connected to the
+inspection and native Save dialog state when the corresponding handlers
+are implemented. Only the version handler is registered today.
 
 **Acceptance criteria:** Unit tests reject invalid URLs/options and
 verify that only approved IPC actions are available.
@@ -582,11 +591,18 @@ verify that only approved IPC actions are available.
 
 ### Step 4.1 --- Binary availability
 
--   [ ] Add a documented local development path for `yt-dlp.exe`.
+-   [x] Add a documented local development path for `yt-dlp.exe`.
 -   [ ] Include FFmpeg/ffprobe only from verified sources when required.
 -   [ ] Check executable availability and version at startup.
 -   [ ] Show a helpful error if a required binary is missing.
--   [ ] Do not download executable files silently at runtime.
+-   [x] Do not download executable files silently at runtime.
+
+Startup availability/version checking and the missing-binary warning are
+implemented in `src/main/services/media/binary-availability.ts` and
+`src/main/index.ts`. The owner should relaunch the app once to confirm the
+local executable passes the new startup check; those two checks remain
+open until that runtime confirmation. FFmpeg/ffprobe are not present and
+will remain out until a verified build is needed for a selected mode.
 
 ### Step 4.2 --- Process wrapper
 
@@ -1008,8 +1024,8 @@ Mark tasks complete only after they are implemented and verified.
 -   [ ] Phase 13 --- Windows packaging and release
 
 **Last completed phase:** Phase 0 --- Scope and dependency checks\
-**Current task:** Phase 3.3 --- Validate IPC inputs (typed contracts and preload façade are in place; media/download handlers remain unregistered)\
-**Next action:** Add main-process validation before registering the exposed media, download, save-dialog, and file-action handlers. Phase 2 still needs inspection loading/success/error states; Phase 1 dependency pinning, lockfile commit, and project-license decision also remain pending. Project owner reports the current app launches and looks correct; keyboard behavior was not separately recorded.
+**Current task:** Phase 4.1 --- Binary availability (startup version check and warning implemented; runtime confirmation pending)\
+**Next action:** Relaunch the app and confirm the existing `yt-dlp.exe` passes the startup check; keep FFmpeg/ffprobe out until a verified build is needed. Phase 3.3 still needs handler integration and acceptance tests; Phase 2 needs inspection loading/success/error states; Phase 1 dependency pinning, lockfile commit, and project-license decision remain pending.
 
 ------------------------------------------------------------------------
 
