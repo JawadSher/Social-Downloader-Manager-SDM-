@@ -5,9 +5,6 @@ out/
 release/
 build/
 
-# Local development binary; obtain and verify a pinned release before packaging
-/resources/binaries/win32-x64/yt-dlp.exe
-
 # Local environment and logs
 .env
 .env.*
