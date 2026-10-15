@@ -541,16 +541,23 @@ destination-path authorization remain in later Phase 3 steps.
 
 ### Step 3.2 --- Define narrow preload methods
 
--   [ ] `media.inspectUrl(url)`
--   [ ] `media.cancelInspection(requestId)`
--   [ ] `downloads.chooseSavePath(suggestedName, extension)`
--   [ ] `downloads.start(request)`
--   [ ] `downloads.cancel(downloadId)`
--   [ ] `downloads.onProgress(callback)`
--   [ ] `downloads.onStatus(callback)`
--   [ ] `files.openFile(path)` and `files.openFolder(path)` with
-    main-process validation
--   [ ] `app.getVersion()`
+-   [x] `media.inspectUrl(requestId, url)`
+-   [x] `media.cancelInspection(requestId)`
+-   [x] `downloads.chooseSavePath(suggestedName, extension)`
+-   [x] `downloads.start(request)`
+-   [x] `downloads.cancel(downloadId)`
+-   [x] `downloads.onProgress(callback)`
+-   [x] `downloads.onStatus(callback)`
+-   [x] `files.openFile(path)` and `files.openFolder(path)`
+-   [x] `app.getVersion()`
+
+The typed `window.sdm` façade and fixed channel names are defined in
+`src/shared/preload-api.ts`, `src/shared/ipc-channels.ts`, and
+`src/preload/index.ts`. Progress/status subscriptions return cleanup
+functions. Inspection accepts a request ID so cancellation can target
+the correct request. Only `app.getVersion()` has a main-process handler
+at this stage; other handlers require the validation and service work
+in subsequent steps and must not be treated as operational yet.
 
 Do not expose unrestricted filesystem access or arbitrary process
 execution to the renderer. Add unsubscribe functions for event
@@ -1001,8 +1008,8 @@ Mark tasks complete only after they are implemented and verified.
 -   [ ] Phase 13 --- Windows packaging and release
 
 **Last completed phase:** Phase 0 --- Scope and dependency checks\
-**Current task:** Phase 2 --- UI shell and theme (screen styling repaired; visual theme and accessibility review pending)\
-**Next action:** Run `npm run dev` and check Light, Dark, and System against the supplied palette, then verify focus visibility and keyboard use. Phase 1 dependency pinning and lockfile commit also remain pending. Shared contracts for Phase 3.1 are implemented; continue with Step 3.2 after Phase 2 review.
+**Current task:** Phase 3.3 --- Validate IPC inputs (typed contracts and preload façade are in place; media/download handlers remain unregistered)\
+**Next action:** Add main-process validation before registering the exposed media, download, save-dialog, and file-action handlers. Phase 2 still needs inspection loading/success/error states; Phase 1 dependency pinning, lockfile commit, and project-license decision also remain pending. Project owner reports the current app launches and looks correct; keyboard behavior was not separately recorded.
 
 ------------------------------------------------------------------------
 

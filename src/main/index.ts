@@ -3,8 +3,7 @@ import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
-
-const appVersionChannel = 'app:get-version'
+import { IPC_CHANNELS } from '../shared/ipc-channels'
 
 function isInternalUrl(candidate: string): boolean {
   const devUrl = process.env['ELECTRON_RENDERER_URL']
@@ -84,7 +83,7 @@ app.whenReady().then(() => {
     optimizer.watchWindowShortcuts(window)
   })
 
-  ipcMain.handle(appVersionChannel, () => app.getVersion())
+  ipcMain.handle(IPC_CHANNELS.appGetVersion, () => app.getVersion())
 
   createWindow()
 

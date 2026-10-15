@@ -105,3 +105,18 @@ export type AppError = {
   message: string
   retryable: boolean
 }
+
+export type OperationResult<T> =
+  | { success: true; data: T }
+  | { success: false; error: AppError }
+
+export type DownloadStart = {
+  downloadId: string
+}
+
+export type DownloadStatus = {
+  downloadId: string
+  stage: DownloadStage
+  error: AppError | null
+  result: DownloadResult | null
+}

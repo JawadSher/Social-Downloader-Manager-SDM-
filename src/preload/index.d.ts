@@ -1,8 +1,4 @@
-export interface SdmApi {
-  app: {
-    getVersion(): Promise<string>
-  }
-}
+import type { SdmApi } from '../shared/preload-api'
 
 declare global {
   interface Window {
