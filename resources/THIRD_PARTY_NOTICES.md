@@ -2,6 +2,12 @@
 
 This file is a provenance record, not a substitute for the applicable license texts. The project owner has confirmed the supplied yt-dlp executable was downloaded from the official GitHub project and has been used successfully from the command line. The project accepts it for development use based on that confirmation.
 
+## Fontsource fonts
+
+- Packages: `@fontsource/poppins`, `@fontsource-variable/roboto`, and `@fontsource-variable/roboto-mono`
+- License: SIL Open Font License 1.1 (OFL-1.1)
+- The package license files in `node_modules` and the selected package versions in `package-lock.json` identify the bundled font assets and license terms.
+
 ## yt-dlp
 
 - Planned source: [official yt-dlp releases](https://github.com/yt-dlp/yt-dlp/releases)
