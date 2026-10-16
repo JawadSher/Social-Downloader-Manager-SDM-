@@ -5,7 +5,13 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import type { AppError } from '../shared/contracts'
 import { IPC_CHANNELS } from '../shared/ipc-channels'
-import { parseInspectionArgs, parseNoArgs, parseRequestIdArgs } from './ipc/validators'
+import {
+  parseInspectionArgs,
+  parseNoArgs,
+  parseRequestIdArgs,
+  parseSaveDialogArgs,
+  validateSelectedSavePath
+} from './ipc/validators'
 import { registerIpcHandler } from './ipc/register-handler'
 import { checkYtDlpAvailability } from './services/media/binary-availability'
 import { inspectMedia, MediaInspectionError } from './services/media/media-inspector'
@@ -201,6 +207,36 @@ app.whenReady().then(async () => {
     (requestId) => {
       cancelYtDlp(requestId)
     }
+  )
+  registerIpcHandler(
+    IPC_CHANNELS.downloadsChooseSavePath,
+    (event) => event.senderFrame === event.sender.mainFrame && isInternalUrl(event.senderFrame.url),
+    parseSaveDialogArgs,
+    async (suggestedName, extension) => {
+      const options: Electron.SaveDialogOptions = {
+        title: 'Choose where to save media',
+        defaultPath: join(app.getPath('downloads'), suggestedName + '.' + extension),
+        filters: [{ name: extension.toUpperCase() + ' files', extensions: [extension] }],
+        properties: ['showOverwriteConfirmation']
+      }
+      const parentWindow = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
+      const result = parentWindow
+        ? await dialog.showSaveDialog(parentWindow, options)
+        : await dialog.showSaveDialog(options)
+
+      if (result.canceled) return null
+
+      const validatedPath = validateSelectedSavePath(result.filePath, extension)
+      if (!validatedPath.success) {
+        throw new Error(validatedPath.error)
+      }
+      return validatedPath.data
+    },
+    () => ({
+      code: 'destination-error',
+      message: 'The save location could not be opened or validated. Choose another location.',
+      retryable: true
+    })
   )
 
   createWindow()

@@ -809,13 +809,13 @@ hardcoded demo data.
 
 ### Step 7.2 --- Choose the output location
 
--   [ ] Open Electron's native Save dialog.
--   [ ] Pre-fill the suggested filename and relevant file filter.
--   [ ] If user cancels, do not start the download.
--   [ ] If a file already exists, ask whether to overwrite, choose
+-   [x] Open Electron's native Save dialog.
+-   [x] Pre-fill the suggested filename and relevant file filter.
+-   [x] If user cancels, do not start the download.
+-   [x] If a file already exists, ask whether to overwrite, choose
     another name, or cancel.
--   [ ] Validate the final destination in the main process.
--   [ ] Do not write outside the selected path.
+-   [x] Validate the final destination in the main process.
+-   [x] Do not write outside the selected path.
 
 **Acceptance criteria:** The download begins only after the user
 confirms a destination and filename.

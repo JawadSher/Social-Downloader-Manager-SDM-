@@ -21,6 +21,7 @@ import { Separator } from '@/components/ui/separator'
 import {
   Link2,
   ClipboardPaste,
+  FolderOpen,
   Image as ImageIcon,
   Sun,
   Moon,
@@ -196,6 +197,9 @@ export default function App(): JSX.Element {
   const [outputMode, setOutputMode] = useState<OutputMode>('best-available')
   const [selectedFormatId, setSelectedFormatId] = useState('')
   const [filenameStem, setFilenameStem] = useState('')
+  const [selectedOutputPath, setSelectedOutputPath] = useState<string | null>(null)
+  const [saveLocationMessage, setSaveLocationMessage] = useState('')
+  const [isChoosingSaveLocation, setIsChoosingSaveLocation] = useState(false)
   const [inspectionError, setInspectionError] = useState<string | null>(null)
   const [inspectionMessage, setInspectionMessage] = useState('')
   const [isInspecting, setIsInspecting] = useState(false)
@@ -224,6 +228,8 @@ export default function App(): JSX.Element {
     setIsInspecting(false)
     setMediaInfo(null)
     setFilenameStem('')
+    setSelectedOutputPath(null)
+    setSaveLocationMessage('')
     setInspectionError(null)
     setInspectionMessage('')
   }
@@ -246,6 +252,8 @@ export default function App(): JSX.Element {
     setIsInspecting(true)
     setMediaInfo(null)
     setFilenameStem('')
+    setSelectedOutputPath(null)
+    setSaveLocationMessage('')
     setOutputMode('best-available')
     setSelectedFormatId('')
     setInspectionError(null)
@@ -270,6 +278,7 @@ export default function App(): JSX.Element {
       setFilenameStem(
         sanitizeFilenameStem(result.data.title, getFormatExtension(initialFormat)) || 'media'
       )
+      setSelectedOutputPath(null)
       setInspectionMessage('Media information retrieved. No media was downloaded.')
     } catch {
       if (activeRequestId.current === requestId) {
@@ -291,6 +300,7 @@ export default function App(): JSX.Element {
     setIsInspecting(false)
     setMediaInfo(null)
     setFilenameStem('')
+    setSelectedOutputPath(null)
     setInspectionError(null)
     setInspectionMessage('Inspection cancelled.')
     void window.sdm.media.cancelInspection(requestId).catch(() => undefined)
@@ -305,6 +315,34 @@ export default function App(): JSX.Element {
   const handleOutputModeChange = (mode: OutputMode): void => {
     setOutputMode(mode)
     setSelectedFormatId(mediaInfo ? getRecommendedFormat(mediaInfo.formats, mode)?.formatId ?? '' : '')
+    setSelectedOutputPath(null)
+    setSaveLocationMessage('')
+  }
+
+  const handleChooseSaveLocation = async (): Promise<void> => {
+    if (!selectedFormat || !selectedExtension) return
+
+    setIsChoosingSaveLocation(true)
+    setSelectedOutputPath(null)
+    setSaveLocationMessage('')
+    try {
+      const result = await window.sdm.downloads.chooseSavePath(
+        safeFilenameStem || 'media',
+        selectedExtension
+      )
+      if (!result.success) {
+        setSaveLocationMessage(result.error.message)
+      } else if (result.data === null) {
+        setSaveLocationMessage('Save location selection cancelled. No download was started.')
+      } else {
+        setSelectedOutputPath(result.data)
+        setSaveLocationMessage('Destination selected. Downloading will be enabled in a later step.')
+      }
+    } catch {
+      setSaveLocationMessage('The save location could not be selected. Try again.')
+    } finally {
+      setIsChoosingSaveLocation(false)
+    }
   }
 
   const compatibleFormats = mediaInfo ? getCompatibleFormats(mediaInfo.formats, outputMode) : []
@@ -812,7 +850,11 @@ export default function App(): JSX.Element {
                   <Select
                     value={selectedFormatId}
                     disabled={!mediaInfo || compatibleFormats.length === 0}
-                    onValueChange={setSelectedFormatId}
+                    onValueChange={(formatId) => {
+                      setSelectedFormatId(formatId)
+                      setSelectedOutputPath(null)
+                      setSaveLocationMessage('')
+                    }}
                   >
                     <SelectTrigger className="h-auto min-h-11 border-[var(--color-border-subtle)] bg-[var(--color-background-soft)] text-left">
                       <SelectValue
@@ -852,7 +894,11 @@ export default function App(): JSX.Element {
                       maxLength={255}
                       autoComplete="off"
                       onChange={(event) =>
-                        setFilenameStem(sanitizeFilenameStem(event.target.value, selectedExtension))
+                        {
+                          setFilenameStem(sanitizeFilenameStem(event.target.value, selectedExtension))
+                          setSelectedOutputPath(null)
+                          setSaveLocationMessage('')
+                        }
                       }
                       placeholder="Filename"
                       aria-describedby="output-filename-help"
@@ -867,6 +913,30 @@ export default function App(): JSX.Element {
                       ? `Suggested name: ${safeFilenameStem || 'media'}.${selectedExtension}. The extension follows the selected format.`
                       : 'Inspect media and select a format with a reported extension to complete the suggested filename.'}
                   </p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={!selectedFormat || !selectedExtension || isChoosingSaveLocation}
+                    onClick={() => void handleChooseSaveLocation()}
+                    className="w-full border-[var(--color-border-subtle)] bg-[var(--color-background-soft)]"
+                  >
+                    {isChoosingSaveLocation ? (
+                      <LoaderCircle className="mr-2 size-4 animate-spin" />
+                    ) : (
+                      <FolderOpen className="mr-2 size-4" />
+                    )}
+                    Choose save location
+                  </Button>
+                  {selectedOutputPath && (
+                    <p className="break-all text-xs text-[var(--color-text-muted)]" role="status">
+                      Selected destination: {selectedOutputPath}
+                    </p>
+                  )}
+                  {saveLocationMessage && (
+                    <p className="text-xs text-[var(--color-text-subtle)]" role="status">
+                      {saveLocationMessage}
+                    </p>
+                  )}
                 </div>
               </CardContent>
             </Card>

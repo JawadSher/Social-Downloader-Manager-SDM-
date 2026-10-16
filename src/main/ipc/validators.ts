@@ -142,6 +142,23 @@ function validateOutputPath(value: string): ValidationResult<string> {
   return success(path.normalize(value))
 }
 
+export function validateSelectedSavePath(
+  value: unknown,
+  expectedExtension: string
+): ValidationResult<string> {
+  if (typeof value !== 'string') return failure('Save dialog did not return a file path.')
+
+  const outputPath = validateOutputPath(value)
+  if (!outputPath.success) return outputPath
+
+  const extension = path.extname(outputPath.data).slice(1).toLowerCase()
+  if (extension !== expectedExtension) {
+    return failure('The selected filename extension does not match the chosen format.')
+  }
+
+  return outputPath
+}
+
 export function parseDownloadStartArgs(args: unknown[]): ValidationResult<DownloadStartArgs> {
   if (args.length !== 1) return failure('Download request is malformed.')
   if (!isRecord(args[0])) return failure('Download request must be an object.')
