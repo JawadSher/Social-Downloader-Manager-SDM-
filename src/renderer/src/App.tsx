@@ -197,8 +197,8 @@ function getNoCompatibleFormatMessage(mediaInfo: MediaInfo, mode: OutputMode): s
   if (mode === 'audio-only' && hasCombinedFormat) {
     return 'Only formats containing video and audio were reported. Extracting audio alone requires FFmpeg.'
   }
-  if (mode === 'video-only' && hasCombinedFormat) {
-    return 'Only formats containing audio were reported. Removing audio requires FFmpeg.'
+  if (mode === 'video-only') {
+    return 'No video-only format is available for this media. Choose another format or output mode.'
   }
   return 'No formats reported by the extractor match this output mode.'
 }
@@ -371,8 +371,8 @@ export default function App(): JSX.Element {
 
   const handleStartDownload = async (): Promise<void> => {
     if (!mediaInfo || !selectedFormat || !selectedOutputPath) return
-    if (outputMode !== 'video-audio' && outputMode !== 'audio-only') {
-      setSaveLocationMessage('Video-only downloads are not available yet.')
+    if (outputMode !== 'video-audio' && outputMode !== 'audio-only' && outputMode !== 'video-only') {
+      setSaveLocationMessage('Best Available downloads are coming in a later step.')
       return
     }
 
@@ -1030,7 +1030,7 @@ export default function App(): JSX.Element {
                     disabled={
                       !selectedOutputPath ||
                       !selectedFormat ||
-                    (outputMode !== 'video-audio' && outputMode !== 'audio-only') ||
+                    (outputMode !== 'video-audio' && outputMode !== 'audio-only' && outputMode !== 'video-only') ||
                       isStartingDownload ||
                       isDownloadActive
                     }
@@ -1042,13 +1042,12 @@ export default function App(): JSX.Element {
                     ) : (
                       <Download className="mr-2 size-4" />
                     )}
-                    {outputMode === 'audio-only' ? 'Download audio only' : 'Download video + audio'}
+                    {outputMode === 'audio-only'
+                      ? 'Download audio only'
+                      : outputMode === 'video-only'
+                        ? 'Download video only'
+                        : 'Download video + audio'}
                   </Button>
-                  {outputMode === 'video-only' && (
-                    <p className="text-xs text-[var(--color-text-subtle)]">
-                      Video-only downloads are coming in a later step.
-                    </p>
-                  )}
                   {selectedOutputPath && (
                     <p className="break-all text-xs text-[var(--color-text-muted)]" role="status">
                       Selected destination: {selectedOutputPath}

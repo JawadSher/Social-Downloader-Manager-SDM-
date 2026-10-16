@@ -855,13 +855,23 @@ manual verification.
 
 ### Step 8.3 --- Video Only (No Audio)
 
--   [ ] Select a true video-only format.
--   [ ] Do not select or merge audio.
--   [ ] Do not mislabel a combined video.
--   [ ] Use ffprobe when available to verify the final file has video
+-   [x] Select a true video-only format.
+-   [x] Do not select or merge audio.
+-   [x] Do not mislabel a combined video.
+-   [x] Use ffprobe when available to verify the final file has video
     and no audio stream.
--   [ ] If no compatible video-only format exists, show a clear message
+-   [x] If no compatible video-only format exists, show a clear message
     and do not silently switch modes.
+
+The renderer offers only formats reported with video and without audio,
+and explains when none are available. The main process validates the
+selected format again, then invokes yt-dlp with only that format ID; it
+does not request audio or run a merge. It verifies the reported output
+path and non-empty file, and checks the video/audio stream types with
+ffprobe when the local executable is present. Missing ffprobe is allowed
+by the roadmap; a failed probe or unexpected stream layout fails the
+download instead of reporting success. `npm.cmd run build` passed. A
+real video-only download has not been manually exercised.
 
 ### Step 8.4 --- Best Available
 
@@ -1120,8 +1130,8 @@ Mark tasks complete only after they are implemented and verified.
 -   [ ] Phase 13 --- Windows packaging and release
 
 **Last completed phase:** Phase 7 --- Save dialog and output filename\
-**Current task:** Phase 8.2 --- Audio Only
-**Next action:** Manually verify Video + Audio combined/merged downloads and Audio Only source-copy/conversion downloads, then implement Step 8.3 (Video Only). Phase 5.2 still needs manual playlist, single-item, and unknown-content checks; playlist scope selection remains deferred until it can flow into a real download request. Phase 5.3 classification and Phase 4.3 inspection failures still need manual checks. Before bundling FFmpeg, complete the required source, checksum, and license review. Phase 1 dependency pinning, lockfile commit, and project-license decision remain pending.
+**Current task:** Phase 8.3 --- Video Only (No Audio)
+**Next action:** Manually verify Video + Audio, Audio Only, and Video Only downloads, then implement Step 8.4 (Best Available). Phase 5.2 still needs manual playlist, single-item, and unknown-content checks; playlist scope selection remains deferred until it can flow into a real download request. Phase 5.3 classification and Phase 4.3 inspection failures still need manual checks. Before bundling FFmpeg, complete the required source, checksum, and license review. Phase 1 dependency pinning, lockfile commit, and project-license decision remain pending.
 
 ------------------------------------------------------------------------
 

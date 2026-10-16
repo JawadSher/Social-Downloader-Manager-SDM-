@@ -26,6 +26,10 @@ export function getFfmpegDirectory(): string {
   )
 }
 
+export function getFfprobePath(): string {
+  return join(getFfmpegDirectory(), 'ffprobe.exe')
+}
+
 function getBinariesDirectory(): string {
   const binaryDirectory = app.isPackaged
     ? join(process.resourcesPath, 'app.asar.unpacked', 'resources', 'binaries')

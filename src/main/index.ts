@@ -22,7 +22,8 @@ import { cancelYtDlp, YtDlpProcessError } from './services/media/ytdlp-service'
 import {
   DownloadRunnerError,
   runAudioOnlyDownload,
-  runVideoAudioDownload
+  runVideoAudioDownload,
+  runVideoOnlyDownload
 } from './services/downloads/download-runner'
 
 let latestInspection: { url: string; formats: MediaFormat[] } | null = null
@@ -309,10 +310,10 @@ app.whenReady().then(async () => {
           retryable: false
         })
       }
-      if (request.outputMode !== 'video-audio' && request.outputMode !== 'audio-only') {
+      if (request.outputMode !== 'video-audio' && request.outputMode !== 'audio-only' && request.outputMode !== 'video-only') {
         throw new DownloadRequestError({
           code: 'format-unavailable',
-          message: 'Video-only downloads are not available yet.',
+          message: 'Best Available downloads are not available yet.',
           retryable: false
         })
       }
@@ -345,13 +346,17 @@ app.whenReady().then(async () => {
         !selectedFormat ||
         (request.outputMode === 'video-audio' && !selectedFormat.hasVideo) ||
         (request.outputMode === 'audio-only' &&
-          (!selectedFormat.hasAudio || selectedFormat.hasVideo))
+          (!selectedFormat.hasAudio || selectedFormat.hasVideo)) ||
+        (request.outputMode === 'video-only' &&
+          (!selectedFormat.hasVideo || selectedFormat.hasAudio))
       ) {
         throw new DownloadRequestError({
           code: 'format-unavailable',
           message: request.outputMode === 'audio-only'
             ? 'Select an audio-only format returned for this media.'
-            : 'Select a video format returned for this media.',
+            : request.outputMode === 'video-only'
+              ? 'Select a video-only format returned for this media.'
+              : 'Select a video format returned for this media.',
           retryable: false
         })
       }
@@ -379,7 +384,9 @@ app.whenReady().then(async () => {
 
       const download = request.outputMode === 'audio-only'
         ? runAudioOnlyDownload(downloadId, validated.data, selectedFormat)
-        : runVideoAudioDownload(downloadId, validated.data, selectedFormat)
+        : request.outputMode === 'video-only'
+          ? runVideoOnlyDownload(downloadId, validated.data, selectedFormat)
+          : runVideoAudioDownload(downloadId, validated.data, selectedFormat)
       void download
         .then((result) => {
           publishDownloadStatus({
