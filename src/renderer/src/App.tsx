@@ -1,5 +1,11 @@
 import { useEffect, useRef, useState, type JSX } from 'react'
-import type { DownloadStatus, MediaFormat, MediaInfo, OutputMode } from '../../shared/contracts'
+import type {
+  AudioFormat,
+  DownloadStatus,
+  MediaFormat,
+  MediaInfo,
+  OutputMode
+} from '../../shared/contracts'
 import { getFormatExtension, sanitizeFilenameStem } from '../../shared/filename'
 import { Button } from '@/components/ui/button'
 import {
@@ -59,6 +65,13 @@ const OUTPUT_MODE_OPTIONS: {
     label: 'Best Available',
     description: 'Use the best compatible format returned for this link.'
   }
+]
+
+const AUDIO_FORMAT_OPTIONS: { value: AudioFormat; label: string }[] = [
+  { value: 'mp3', label: 'MP3' },
+  { value: 'm4a', label: 'M4A' },
+  { value: 'opus', label: 'Opus' },
+  { value: 'wav', label: 'WAV' }
 ]
 
 const THEME_OPTIONS: { value: Theme; label: string; icon: typeof Sun }[] = [
@@ -198,6 +211,7 @@ export default function App(): JSX.Element {
   const [outputMode, setOutputMode] = useState<OutputMode>('best-available')
   const [selectedFormatId, setSelectedFormatId] = useState('')
   const [filenameStem, setFilenameStem] = useState('')
+  const [selectedAudioFormat, setSelectedAudioFormat] = useState<AudioFormat | null>(null)
   const [selectedOutputPath, setSelectedOutputPath] = useState<string | null>(null)
   const [saveLocationMessage, setSaveLocationMessage] = useState('')
   const [isChoosingSaveLocation, setIsChoosingSaveLocation] = useState(false)
@@ -233,6 +247,7 @@ export default function App(): JSX.Element {
     setIsInspecting(false)
     setMediaInfo(null)
     setFilenameStem('')
+    setSelectedAudioFormat(null)
     setSelectedOutputPath(null)
     setSaveLocationMessage('')
     setInspectionError(null)
@@ -257,6 +272,7 @@ export default function App(): JSX.Element {
     setIsInspecting(true)
     setMediaInfo(null)
     setFilenameStem('')
+    setSelectedAudioFormat(null)
     setSelectedOutputPath(null)
     setSaveLocationMessage('')
     setOutputMode('best-available')
@@ -280,6 +296,7 @@ export default function App(): JSX.Element {
       const initialFormat = getRecommendedFormat(result.data.formats, 'best-available')
       setMediaInfo(result.data)
       setSelectedFormatId(initialFormat?.formatId ?? '')
+      setSelectedAudioFormat(null)
       setFilenameStem(
         sanitizeFilenameStem(result.data.title, getFormatExtension(initialFormat)) || 'media'
       )
@@ -305,6 +322,7 @@ export default function App(): JSX.Element {
     setIsInspecting(false)
     setMediaInfo(null)
     setFilenameStem('')
+    setSelectedAudioFormat(null)
     setSelectedOutputPath(null)
     setInspectionError(null)
     setInspectionMessage('Inspection cancelled.')
@@ -320,6 +338,7 @@ export default function App(): JSX.Element {
   const handleOutputModeChange = (mode: OutputMode): void => {
     setOutputMode(mode)
     setSelectedFormatId(mediaInfo ? getRecommendedFormat(mediaInfo.formats, mode)?.formatId ?? '' : '')
+    setSelectedAudioFormat(null)
     setSelectedOutputPath(null)
     setSaveLocationMessage('')
   }
@@ -352,8 +371,8 @@ export default function App(): JSX.Element {
 
   const handleStartDownload = async (): Promise<void> => {
     if (!mediaInfo || !selectedFormat || !selectedOutputPath) return
-    if (outputMode !== 'video-audio') {
-      setSaveLocationMessage('Audio-only and video-only downloads are not available yet.')
+    if (outputMode !== 'video-audio' && outputMode !== 'audio-only') {
+      setSaveLocationMessage('Video-only downloads are not available yet.')
       return
     }
 
@@ -365,7 +384,7 @@ export default function App(): JSX.Element {
         outputMode,
         formatId: selectedFormat.formatId,
         outputPath: selectedOutputPath,
-        audioFormat: null
+        audioFormat: outputMode === 'audio-only' ? selectedAudioFormat : null
       })
       if (!result.success) setSaveLocationMessage(result.error.message)
     } catch {
@@ -380,7 +399,11 @@ export default function App(): JSX.Element {
     ? getRecommendedFormat(mediaInfo.formats, outputMode)
     : null
   const selectedFormat = compatibleFormats.find((format) => format.formatId === selectedFormatId) ?? null
-  const selectedExtension = getFormatExtension(selectedFormat)
+  const sourceExtension = getFormatExtension(selectedFormat)
+  const selectedExtension =
+    outputMode === 'audio-only' && selectedAudioFormat
+      ? selectedAudioFormat
+      : sourceExtension
   const safeFilenameStem = sanitizeFilenameStem(filenameStem, selectedExtension)
   const isDownloadActive =
     downloadStatus?.stage === 'preparing' ||
@@ -878,6 +901,46 @@ export default function App(): JSX.Element {
                   </p>
                 </div>
 
+                {outputMode === 'audio-only' && (
+                  <div className="space-y-2">
+                    <label className="text-xs font-semibold uppercase tracking-widest text-[var(--color-text-subtle)]">
+                      Audio output format
+                    </label>
+                    <Select
+                      value={selectedAudioFormat ?? 'source'}
+                      disabled={!selectedFormat || isDownloadActive}
+                      onValueChange={(value) => {
+                        setSelectedAudioFormat(
+                          value === 'source'
+                            ? null
+                            : AUDIO_FORMAT_OPTIONS.find((option) => option.value === value)?.value ?? null
+                        )
+                        setSelectedOutputPath(null)
+                        setSaveLocationMessage('')
+                      }}
+                    >
+                      <SelectTrigger className="h-11 border-[var(--color-border-subtle)] bg-[var(--color-background-soft)]">
+                        <SelectValue placeholder="Keep source format" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="source">
+                          Keep source format{sourceExtension ? ' (' + sourceExtension.toUpperCase() + ')' : ''}
+                        </SelectItem>
+                        {AUDIO_FORMAT_OPTIONS.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs leading-relaxed text-[var(--color-text-subtle)]">
+                      {selectedAudioFormat
+                        ? 'FFmpeg will convert the selected audio stream to ' + selectedAudioFormat.toUpperCase() + '.'
+                        : 'Save the selected audio stream without conversion.'}
+                    </p>
+                  </div>
+                )}
+
                 <div className="space-y-2">
                   <label className="text-xs font-semibold uppercase tracking-widest text-[var(--color-text-subtle)]">
                     Format & quality
@@ -967,7 +1030,7 @@ export default function App(): JSX.Element {
                     disabled={
                       !selectedOutputPath ||
                       !selectedFormat ||
-                      outputMode !== 'video-audio' ||
+                    (outputMode !== 'video-audio' && outputMode !== 'audio-only') ||
                       isStartingDownload ||
                       isDownloadActive
                     }
@@ -979,11 +1042,11 @@ export default function App(): JSX.Element {
                     ) : (
                       <Download className="mr-2 size-4" />
                     )}
-                    Download video + audio
+                    {outputMode === 'audio-only' ? 'Download audio only' : 'Download video + audio'}
                   </Button>
-                  {outputMode !== 'video-audio' && (
+                  {outputMode === 'video-only' && (
                     <p className="text-xs text-[var(--color-text-subtle)]">
-                      Audio-only and video-only downloads are coming in later steps.
+                      Video-only downloads are coming in a later step.
                     </p>
                   )}
                   {selectedOutputPath && (
@@ -1039,7 +1102,7 @@ export default function App(): JSX.Element {
                         No active download
                       </p>
                       <p className="mt-1 text-xs leading-relaxed text-[var(--color-text-subtle)]">
-                        Choose a format and save location to download video with audio.
+                        Choose a format and save location to begin a download.
                       </p>
                     </>
                   )}

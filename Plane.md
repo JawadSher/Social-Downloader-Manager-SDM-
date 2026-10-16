@@ -841,10 +841,17 @@ not yet been manually exercised.
 
 ### Step 8.2 --- Audio Only
 
--   [ ] Select an audio-only stream where available.
--   [ ] Offer only supported conversion choices.
--   [ ] Keep source audio format when conversion is not requested.
--   [ ] Report conversion failures separately from network errors.
+-   [x] Select an audio-only stream where available.
+-   [x] Offer only supported conversion choices.
+-   [x] Keep source audio format when conversion is not requested.
+-   [x] Report conversion failures separately from network errors.
+
+Audio Only now selects a returned audio-only format, defaults to retaining
+its source format, and offers the supported MP3, M4A, Opus, and WAV
+conversion targets. Conversion uses the local FFmpeg binary and maps
+conversion failures separately from download/network failures. The
+production build passed; source-copy and conversion downloads still need
+manual verification.
 
 ### Step 8.3 --- Video Only (No Audio)
 
@@ -1113,8 +1120,8 @@ Mark tasks complete only after they are implemented and verified.
 -   [ ] Phase 13 --- Windows packaging and release
 
 **Last completed phase:** Phase 7 --- Save dialog and output filename\
-**Current task:** Phase 8.1 --- Video + Audio
-**Next action:** Manually verify a combined-format download and a separate-stream FFmpeg merge, then continue to Step 8.2 (Audio Only). Phase 5.2 still needs manual playlist, single-item, and unknown-content checks; playlist scope selection remains deferred until it can flow into a real download request. Phase 5.3 classification and Phase 4.3 inspection failures still need manual checks. Before FFmpeg packaging, verify the local candidate's runtime version/configuration and match its provenance and checksums to an upstream release. Phase 1 dependency pinning, lockfile commit, and project-license decision remain pending.
+**Current task:** Phase 8.2 --- Audio Only
+**Next action:** Manually verify Video + Audio combined/merged downloads and Audio Only source-copy/conversion downloads, then implement Step 8.3 (Video Only). Phase 5.2 still needs manual playlist, single-item, and unknown-content checks; playlist scope selection remains deferred until it can flow into a real download request. Phase 5.3 classification and Phase 4.3 inspection failures still need manual checks. Before bundling FFmpeg, complete the required source, checksum, and license review. Phase 1 dependency pinning, lockfile commit, and project-license decision remain pending.
 
 ------------------------------------------------------------------------
 

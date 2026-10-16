@@ -100,6 +100,7 @@ export type AppErrorCode =
   | 'format-unavailable'
   | 'ffmpeg-missing'
   | 'processing-failed'
+  | 'conversion-failed'
   | 'destination-error'
   | 'file-exists'
   | 'cancelled'

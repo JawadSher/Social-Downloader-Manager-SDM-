@@ -14,7 +14,12 @@ export type VideoAudioDownloadResult = {
 
 export class DownloadRunnerError extends Error {
   constructor(
-    readonly code: 'ffmpeg-missing' | 'format-unavailable' | 'processing-failed' | 'download-failed',
+    readonly code:
+      | 'ffmpeg-missing'
+      | 'format-unavailable'
+      | 'processing-failed'
+      | 'conversion-failed'
+      | 'download-failed',
     message: string
   ) {
     super(message)
@@ -118,6 +123,103 @@ export async function runVideoAudioDownload(
       throw new DownloadRunnerError('download-failed', 'The media download failed. Try again.')
     }
     throw new DownloadRunnerError('download-failed', 'The media download could not be completed.')
+  }
+}
+
+export async function runAudioOnlyDownload(
+  downloadId: string,
+  request: DownloadRequest,
+  format: MediaFormat
+): Promise<VideoAudioDownloadResult> {
+  const conversionFormat = request.audioFormat
+  const ffmpegDirectory = getFfmpegDirectory()
+
+  if (conversionFormat) {
+    try {
+      const ffmpegInfo = await stat(resolve(ffmpegDirectory, 'ffmpeg.exe'))
+      if (!ffmpegInfo.isFile()) throw new Error('FFmpeg is not a file.')
+    } catch {
+      throw new DownloadRunnerError(
+        'ffmpeg-missing',
+        'FFmpeg is required to convert this audio format.'
+      )
+    }
+  }
+
+  const args = [
+    '--ignore-config',
+    '--no-warnings',
+    '--no-progress',
+    '--force-overwrites',
+    '--format',
+    format.formatId,
+    '--output',
+    request.outputPath
+  ]
+  if (conversionFormat) {
+    args.push(
+      '--extract-audio',
+      '--audio-format',
+      conversionFormat,
+      '--ffmpeg-location',
+      ffmpegDirectory
+    )
+  }
+  args.push('--print', 'after_move:filepath', request.mediaUrl)
+
+  try {
+    const { stdout } = await runYtDlp(args, {
+      requestId: downloadId,
+      timeoutMs: DOWNLOAD_TIMEOUT_MS,
+      maxStdoutBytes: 64 * 1024,
+      maxStderrBytes: 1024 * 1024
+    })
+    const reportedPath = stdout
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .at(-1)
+
+    if (!reportedPath || resolve(reportedPath).toLowerCase() !== resolve(request.outputPath).toLowerCase()) {
+      throw new DownloadRunnerError(
+        conversionFormat ? 'conversion-failed' : 'download-failed',
+        'The completed output did not match the selected save path.'
+      )
+    }
+
+    const outputInfo = await stat(request.outputPath)
+    if (!outputInfo.isFile() || outputInfo.size <= 0) {
+      throw new DownloadRunnerError(
+        conversionFormat ? 'conversion-failed' : 'download-failed',
+        'The completed audio file could not be verified.'
+      )
+    }
+
+    return { outputPath: request.outputPath, fileSizeBytes: outputInfo.size }
+  } catch (error) {
+    if (error instanceof DownloadRunnerError) throw error
+    if (error instanceof YtDlpProcessError) {
+      const diagnostic = error.diagnostic?.toLowerCase() ?? ''
+      if (/unable to download|timed? out|connection|temporary failure|network|http error/.test(diagnostic)) {
+        throw new DownloadRunnerError(
+          'download-failed',
+          'A network or source error interrupted the audio download.'
+        )
+      }
+      if (conversionFormat) {
+        throw new DownloadRunnerError(
+          'conversion-failed',
+          'Audio conversion failed. Choose another format or keep the source format.'
+        )
+      }
+      throw new DownloadRunnerError('download-failed', 'The audio download failed. Try again.')
+    }
+    throw new DownloadRunnerError(
+      conversionFormat ? 'conversion-failed' : 'download-failed',
+      conversionFormat
+        ? 'Audio conversion could not be completed.'
+        : 'The audio download could not be completed.'
+    )
   }
 }
 

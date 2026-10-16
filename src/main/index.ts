@@ -19,7 +19,11 @@ import { registerIpcHandler } from './ipc/register-handler'
 import { checkYtDlpAvailability } from './services/media/binary-availability'
 import { inspectMedia, MediaInspectionError } from './services/media/media-inspector'
 import { cancelYtDlp, YtDlpProcessError } from './services/media/ytdlp-service'
-import { DownloadRunnerError, runVideoAudioDownload } from './services/downloads/download-runner'
+import {
+  DownloadRunnerError,
+  runAudioOnlyDownload,
+  runVideoAudioDownload
+} from './services/downloads/download-runner'
 
 let latestInspection: { url: string; formats: MediaFormat[] } | null = null
 let authorizedOutputPath: string | null = null
@@ -305,10 +309,10 @@ app.whenReady().then(async () => {
           retryable: false
         })
       }
-      if (request.outputMode !== 'video-audio') {
+      if (request.outputMode !== 'video-audio' && request.outputMode !== 'audio-only') {
         throw new DownloadRequestError({
           code: 'format-unavailable',
-          message: 'Audio-only and video-only downloads are not available yet.',
+          message: 'Video-only downloads are not available yet.',
           retryable: false
         })
       }
@@ -337,14 +341,22 @@ app.whenReady().then(async () => {
       const selectedFormat = latestInspection.formats.find(
         (format) => format.formatId === validated.data.formatId
       )
-      if (!selectedFormat || !selectedFormat.hasVideo) {
+      if (
+        !selectedFormat ||
+        (request.outputMode === 'video-audio' && !selectedFormat.hasVideo) ||
+        (request.outputMode === 'audio-only' &&
+          (!selectedFormat.hasAudio || selectedFormat.hasVideo))
+      ) {
         throw new DownloadRequestError({
           code: 'format-unavailable',
-          message: 'Select a video format returned for this media.',
+          message: request.outputMode === 'audio-only'
+            ? 'Select an audio-only format returned for this media.'
+            : 'Select a video format returned for this media.',
           retryable: false
         })
       }
       if (
+        request.outputMode === 'video-audio' &&
         !selectedFormat.hasAudio &&
         !latestInspection.formats.some((format) => format.hasAudio && !format.hasVideo)
       ) {
@@ -365,7 +377,10 @@ app.whenReady().then(async () => {
         result: null
       })
 
-      void runVideoAudioDownload(downloadId, validated.data, selectedFormat)
+      const download = request.outputMode === 'audio-only'
+        ? runAudioOnlyDownload(downloadId, validated.data, selectedFormat)
+        : runVideoAudioDownload(downloadId, validated.data, selectedFormat)
+      void download
         .then((result) => {
           publishDownloadStatus({
             downloadId,
