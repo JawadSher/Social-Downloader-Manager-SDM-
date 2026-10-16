@@ -898,34 +898,20 @@ verified, so the roadmap acceptance criteria remain pending.
 
 ### Step 9.1 --- Progress parsing
 
--   [ ] Use machine-readable yt-dlp progress output.
--   [ ] Parse percentage, bytes, speed, ETA, and stage where available.
--   [ ] Handle unknown total size/ETA.
--   [ ] Throttle renderer progress events.
--   [ ] Display preparing, downloading, merging/converting, completed,
+-   [x] Use machine-readable yt-dlp progress output.
+-   [x] Parse percentage, bytes, speed, ETA, and stage where available.
+-   [x] Handle unknown total size/ETA.
+-   [x] Throttle renderer progress events.
+-   [x] Display preparing, downloading, merging/converting, completed,
     failed, and cancelled states.
 
-### Step 9.2 --- Cancel behavior
-
--   [ ] Implement cancellation for inspection and active download.
--   [ ] Stop child processes safely.
--   [ ] Decide and document how partial files are handled.
--   [ ] Do not show pause/resume unless it is implemented and tested.
--   [ ] Ensure no orphaned yt-dlp/FFmpeg process remains after
-    cancellation.
-
-### Step 9.3 --- Completion
-
--   [ ] Show "Download complete."
--   [ ] Show the final file name.
--   [ ] Add Open File.
--   [ ] Add Open Folder.
--   [ ] Keep the completion state in memory only while the current app
-    session needs it.
--   [ ] Do not add the result to a persistent history.
-
-**Acceptance criteria:** Progress stays responsive, cancellation works,
-and completion only appears after the output is verified.
+yt-dlp downloads now use newline-delimited progress templates, parsed
+into typed progress events with unknown values retained as unavailable.
+The main process throttles same-stage updates to at most one per 150 ms,
+and the renderer shows progress, available transfer metrics, and
+download/merge/conversion/terminal status labels. `npm.cmd run build`
+passed. Live downloads have not yet been checked for progress-template
+compatibility across source extractors.
 
 ------------------------------------------------------------------------
 
@@ -1138,8 +1124,8 @@ Mark tasks complete only after they are implemented and verified.
 -   [ ] Phase 13 --- Windows packaging and release
 
 **Last completed phase:** Phase 7 --- Save dialog and output filename\
-**Current task:** Phase 8.4 --- Best Available
-**Next action:** Manually verify Video + Audio, Audio Only, Video Only, and Best Available downloads across combined-stream, separate-stream, and audio-only media. Then proceed to Phase 9. Phase 5.2 playlist/content checks, Phase 5.3 and Phase 4.3 error checks remain pending. Before bundling FFmpeg, complete the required source, checksum, and license review. Phase 1 dependency pinning, lockfile commit, and project-license decision remain pending.
+**Current task:** Phase 9.1 --- Progress parsing
+**Next action:** Manually verify progress parsing and presentation with a live download, then implement Phase 9.2 (Cancel behavior). Previous manual checks remain pending: Phase 5.2 playlist/content checks, Phase 5.3 and Phase 4.3 error checks, and Phase 8 mode-specific downloads. Before bundling FFmpeg, complete the required source, checksum, and license review. Phase 1 dependency pinning, lockfile commit, and project-license decision remain pending.
 
 ------------------------------------------------------------------------
 

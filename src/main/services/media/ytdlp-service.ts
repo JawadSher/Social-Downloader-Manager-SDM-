@@ -21,6 +21,7 @@ export type YtDlpProcessOptions = {
   timeoutMs?: number
   maxStdoutBytes?: number
   maxStderrBytes?: number
+  onStdoutLine?: (line: string) => void
 }
 
 export type YtDlpProcessErrorCode =
@@ -180,6 +181,7 @@ function startYtDlpProcess(
     const stdoutDecoder = new StringDecoder('utf8')
     const stderrDecoder = new StringDecoder('utf8')
     let stdout = ''
+    let stdoutPending = ''
     let stderr = ''
     let stdoutBytes = 0
     let stderrBytes = 0
@@ -204,6 +206,28 @@ function startYtDlpProcess(
       child.kill()
     }
 
+    const consumeStdoutLines = (chunk: string, flush = false): void => {
+      stdoutPending += chunk
+      const lines = stdoutPending.split(/\r?\n/)
+      stdoutPending = flush ? '' : (lines.pop() ?? '')
+      if (flush && lines.at(-1) === '') lines.pop()
+      for (const line of lines) {
+        try {
+          options.onStdoutLine?.(line)
+        } catch {
+          // Progress observers must not interfere with the yt-dlp process.
+        }
+      }
+      if (flush && stdoutPending) {
+        try {
+          options.onStdoutLine?.(stdoutPending)
+        } catch {
+          // Progress observers must not interfere with the yt-dlp process.
+        }
+        stdoutPending = ''
+      }
+    }
+
     operation.cancel = () => {
       terminate(new YtDlpProcessError('cancelled', 'The yt-dlp request was cancelled.'))
     }
@@ -221,7 +245,9 @@ function startYtDlpProcess(
         )
         return
       }
-      stdout += stdoutDecoder.write(chunk)
+      const decoded = stdoutDecoder.write(chunk)
+      stdout += decoded
+      consumeStdoutLines(decoded)
     })
 
     child.stderr.on('data', (chunk: Buffer) => {
@@ -249,7 +275,9 @@ function startYtDlpProcess(
     })
 
     child.once('close', (exitCode, signal) => {
-      stdout += stdoutDecoder.end()
+      const stdoutTail = stdoutDecoder.end()
+      stdout += stdoutTail
+      consumeStdoutLines(stdoutTail, true)
       stderr += stderrDecoder.end()
 
       if (terminalError) {

@@ -1,16 +1,45 @@
 import { execFile } from 'node:child_process'
 import { stat } from 'node:fs/promises'
 import { resolve } from 'node:path'
-import type { DownloadRequest, MediaFormat } from '../../../shared/contracts'
+import type { DownloadProgress, DownloadRequest, MediaFormat } from '../../../shared/contracts'
 import { getFfprobePath, getFfmpegDirectory } from '../media/binary-availability'
 import { runYtDlp, YtDlpProcessError } from '../media/ytdlp-service'
+import { parseYtDlpProgressLine } from './progress-parser'
 
 const DOWNLOAD_TIMEOUT_MS = 30 * 60 * 1000
 const MERGEABLE_CONTAINERS = new Set(['avi', 'flv', 'mkv', 'mov', 'mp4', 'webm'])
+const YTDLP_PROGRESS_ARGS = [
+  '--newline',
+  '--no-colors',
+  '--progress-template',
+  'download:SDM_PROGRESS:%(progress.status)s|%(progress.downloaded_bytes)s|%(progress.total_bytes)s|%(progress.total_bytes_estimate)s|%(progress.speed)s|%(progress.eta)s',
+  '--progress-template',
+  'postprocess:SDM_POSTPROCESS:%(progress.status)s|%(progress.postprocessor)s'
+]
 
 export type VideoAudioDownloadResult = {
   outputPath: string
   fileSizeBytes: number
+}
+
+type DownloadProgressHandler = (progress: DownloadProgress) => void
+
+function createProgressHandler(
+  downloadId: string,
+  request: DownloadRequest,
+  onProgress?: DownloadProgressHandler,
+  isAudioConversion = false
+): ((line: string) => void) | undefined {
+  if (!onProgress) return undefined
+  return (line) => {
+    const progress = parseYtDlpProgressLine(
+      line,
+      downloadId,
+      request.outputPath,
+      isAudioConversion
+    )
+    if (progress) onProgress(progress)
+  }
 }
 
 export class DownloadRunnerError extends Error {
@@ -31,7 +60,8 @@ export class DownloadRunnerError extends Error {
 export async function runVideoAudioDownload(
   downloadId: string,
   request: DownloadRequest,
-  format: MediaFormat
+  format: MediaFormat,
+  onProgress?: DownloadProgressHandler
 ): Promise<VideoAudioDownloadResult> {
   const needsMerge = !format.hasAudio
   const ffmpegDirectory = getFfmpegDirectory()
@@ -61,7 +91,7 @@ export async function runVideoAudioDownload(
   const args = [
     '--ignore-config',
     '--no-warnings',
-    '--no-progress',
+    ...YTDLP_PROGRESS_ARGS,
     '--force-overwrites',
     '--format',
     formatSelector,
@@ -80,8 +110,9 @@ export async function runVideoAudioDownload(
     const { stdout } = await runYtDlp(args, {
       requestId: downloadId,
       timeoutMs: DOWNLOAD_TIMEOUT_MS,
-      maxStdoutBytes: 64 * 1024,
-      maxStderrBytes: 1024 * 1024
+      maxStdoutBytes: 8 * 1024 * 1024,
+      maxStderrBytes: 1024 * 1024,
+      onStdoutLine: createProgressHandler(downloadId, request, onProgress)
     })
     const reportedPath = stdout
       .split(/\r?\n/)
@@ -130,7 +161,8 @@ export async function runVideoAudioDownload(
 export async function runAudioOnlyDownload(
   downloadId: string,
   request: DownloadRequest,
-  format: MediaFormat
+  format: MediaFormat,
+  onProgress?: DownloadProgressHandler
 ): Promise<VideoAudioDownloadResult> {
   const conversionFormat = request.audioFormat
   const ffmpegDirectory = getFfmpegDirectory()
@@ -150,7 +182,7 @@ export async function runAudioOnlyDownload(
   const args = [
     '--ignore-config',
     '--no-warnings',
-    '--no-progress',
+    ...YTDLP_PROGRESS_ARGS,
     '--force-overwrites',
     '--format',
     format.formatId,
@@ -172,8 +204,14 @@ export async function runAudioOnlyDownload(
     const { stdout } = await runYtDlp(args, {
       requestId: downloadId,
       timeoutMs: DOWNLOAD_TIMEOUT_MS,
-      maxStdoutBytes: 64 * 1024,
-      maxStderrBytes: 1024 * 1024
+      maxStdoutBytes: 8 * 1024 * 1024,
+      maxStderrBytes: 1024 * 1024,
+      onStdoutLine: createProgressHandler(
+        downloadId,
+        request,
+        onProgress,
+        Boolean(conversionFormat)
+      )
     })
     const reportedPath = stdout
       .split(/\r?\n/)
@@ -227,7 +265,8 @@ export async function runAudioOnlyDownload(
 export async function runVideoOnlyDownload(
   downloadId: string,
   request: DownloadRequest,
-  format: MediaFormat
+  format: MediaFormat,
+  onProgress?: DownloadProgressHandler
 ): Promise<VideoAudioDownloadResult> {
   if (!format.hasVideo || format.hasAudio) {
     throw new DownloadRunnerError(
@@ -239,7 +278,7 @@ export async function runVideoOnlyDownload(
   const args = [
     '--ignore-config',
     '--no-warnings',
-    '--no-progress',
+    ...YTDLP_PROGRESS_ARGS,
     '--force-overwrites',
     '--format',
     format.formatId,
@@ -254,8 +293,9 @@ export async function runVideoOnlyDownload(
     const { stdout } = await runYtDlp(args, {
       requestId: downloadId,
       timeoutMs: DOWNLOAD_TIMEOUT_MS,
-      maxStdoutBytes: 64 * 1024,
-      maxStderrBytes: 1024 * 1024
+      maxStdoutBytes: 8 * 1024 * 1024,
+      maxStderrBytes: 1024 * 1024,
+      onStdoutLine: createProgressHandler(downloadId, request, onProgress)
     })
     const reportedPath = stdout.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).at(-1)
     if (!reportedPath || resolve(reportedPath).toLowerCase() !== resolve(request.outputPath).toLowerCase()) {

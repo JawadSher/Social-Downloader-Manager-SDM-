@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
-import type { AppError, DownloadRequest, DownloadStatus, MediaFormat } from '../shared/contracts'
+import type { AppError, DownloadProgress, DownloadRequest, DownloadStatus, MediaFormat } from '../shared/contracts'
 import { IPC_CHANNELS } from '../shared/ipc-channels'
 import {
   parseInspectionArgs,
@@ -42,6 +42,26 @@ function publishDownloadStatus(status: DownloadStatus): void {
     if (!window.isDestroyed()) {
       window.webContents.send(IPC_CHANNELS.downloadsStatus, status)
     }
+  }
+}
+
+function publishDownloadProgress(progress: DownloadProgress): void {
+  for (const window of BrowserWindow.getAllWindows()) {
+    if (!window.isDestroyed()) {
+      window.webContents.send(IPC_CHANNELS.downloadsProgress, progress)
+    }
+  }
+}
+
+function createThrottledProgressPublisher(downloadId: string): (progress: DownloadProgress) => void {
+  let lastSentAt = 0
+  let lastStage: DownloadProgress['stage'] | null = null
+  return (progress) => {
+    const now = Date.now()
+    if (progress.stage === lastStage && now - lastSentAt < 150) return
+    lastSentAt = now
+    lastStage = progress.stage
+    publishDownloadProgress({ ...progress, downloadId })
   }
 }
 
@@ -387,12 +407,13 @@ app.whenReady().then(async () => {
         result: null
       })
 
+      const reportProgress = createThrottledProgressPublisher(downloadId)
       const download = request.outputMode === 'audio-only' ||
         (request.outputMode === 'best-available' && !selectedFormat.hasVideo)
-        ? runAudioOnlyDownload(downloadId, validated.data, selectedFormat)
+        ? runAudioOnlyDownload(downloadId, validated.data, selectedFormat, reportProgress)
         : request.outputMode === 'video-only'
-          ? runVideoOnlyDownload(downloadId, validated.data, selectedFormat)
-          : runVideoAudioDownload(downloadId, validated.data, selectedFormat)
+          ? runVideoOnlyDownload(downloadId, validated.data, selectedFormat, reportProgress)
+          : runVideoAudioDownload(downloadId, validated.data, selectedFormat, reportProgress)
       void download
         .then((result) => {
           publishDownloadStatus({

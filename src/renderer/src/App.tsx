@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type JSX } from 'react'
 import type {
   AudioFormat,
+  DownloadProgress,
   DownloadStatus,
   MediaFormat,
   MediaInfo,
@@ -227,6 +228,7 @@ export default function App(): JSX.Element {
   const [saveLocationMessage, setSaveLocationMessage] = useState('')
   const [isChoosingSaveLocation, setIsChoosingSaveLocation] = useState(false)
   const [downloadStatus, setDownloadStatus] = useState<DownloadStatus | null>(null)
+  const [downloadProgress, setDownloadProgress] = useState<DownloadProgress | null>(null)
   const [isStartingDownload, setIsStartingDownload] = useState(false)
   const [inspectionError, setInspectionError] = useState<string | null>(null)
   const [inspectionMessage, setInspectionMessage] = useState('')
@@ -237,7 +239,17 @@ export default function App(): JSX.Element {
     document.documentElement.dataset.theme = theme
   }, [theme])
 
-  useEffect(() => window.sdm.downloads.onStatus(setDownloadStatus), [])
+  useEffect(() => window.sdm.downloads.onProgress(setDownloadProgress), [])
+
+  useEffect(
+    () => window.sdm.downloads.onStatus((status) => {
+      setDownloadStatus(status)
+      if (status.stage === 'completed' || status.stage === 'failed' || status.stage === 'cancelled') {
+        setDownloadProgress(null)
+      }
+    }),
+    []
+  )
 
   useEffect(() => {
     return () => {
@@ -383,6 +395,7 @@ export default function App(): JSX.Element {
   const handleStartDownload = async (): Promise<void> => {
     if (!mediaInfo || !selectedFormat || !selectedOutputPath) return
     setIsStartingDownload(true)
+    setDownloadProgress(null)
     setSaveLocationMessage('')
     try {
       const result = await window.sdm.downloads.start({
@@ -416,6 +429,9 @@ export default function App(): JSX.Element {
     downloadStatus?.stage === 'downloading' ||
     downloadStatus?.stage === 'merging' ||
     downloadStatus?.stage === 'converting'
+  const currentDownloadStage = downloadProgress && downloadProgress.downloadId === downloadStatus?.downloadId
+    ? downloadProgress.stage
+    : downloadStatus?.stage
 
   const handlePaste = async (): Promise<void> => {
     setClipboardMessage('')
@@ -1084,14 +1100,55 @@ export default function App(): JSX.Element {
                   {downloadStatus ? (
                     <>
                       <p className="text-sm font-medium text-[var(--color-text-muted)]">
-                        {downloadStatus.stage === 'completed'
+                        {currentDownloadStage === 'completed'
                           ? 'Download complete'
-                          : downloadStatus.stage === 'failed'
+                          : currentDownloadStage === 'failed'
                             ? 'Download failed'
-                            : downloadStatus.stage === 'downloading'
+                            : currentDownloadStage === 'cancelled'
+                              ? 'Download cancelled'
+                              : currentDownloadStage === 'downloading'
                               ? 'Downloading'
-                              : 'Preparing download'}
+                              : currentDownloadStage === 'merging'
+                                ? 'Merging media'
+                                : currentDownloadStage === 'converting'
+                                  ? 'Converting audio'
+                                  : 'Preparing download'}
                       </p>
+                      {downloadProgress?.downloadId === downloadStatus.downloadId && (
+                        <div className="mt-3 space-y-1.5" aria-live="polite">
+                          <progress
+                            className="h-2 w-full accent-[var(--color-focus)]"
+                            max={100}
+                            value={downloadProgress.percent ?? undefined}
+                            aria-label="Download progress"
+                          />
+                          <div className="flex flex-wrap justify-between gap-x-3 gap-y-1 text-xs text-[var(--color-text-subtle)]">
+                            <span>
+                              {downloadProgress.percent === null
+                                ? 'Progress percentage unavailable'
+                                : `${downloadProgress.percent.toFixed(1)}%`}
+                            </span>
+                            <span>
+                              {downloadProgress.downloadedBytes === null
+                                ? 'Downloaded size unavailable'
+                                : `${formatFileSize(downloadProgress.downloadedBytes)} downloaded`}
+                              {downloadProgress.totalBytes === null
+                                ? ''
+                                : ` of ${formatFileSize(downloadProgress.totalBytes)}`}
+                            </span>
+                            <span>
+                              {downloadProgress.speedBytesPerSecond === null
+                                ? 'Speed unavailable'
+                                : `${formatFileSize(downloadProgress.speedBytesPerSecond)}/s`}
+                            </span>
+                            <span>
+                              {downloadProgress.etaSeconds === null
+                                ? 'ETA unavailable'
+                                : `About ${formatDuration(downloadProgress.etaSeconds)} remaining`}
+                            </span>
+                          </div>
+                        </div>
+                      )}
                       {downloadStatus.error && (
                         <p className="mt-1 text-xs leading-relaxed text-[var(--color-text-subtle)]">
                           {downloadStatus.error.message}
