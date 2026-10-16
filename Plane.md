@@ -760,11 +760,18 @@ details, and successful inspection state. `npm.cmd run build` passed.
 
 ### Step 6.2 --- Build output mode selection
 
--   [ ] Video + Audio.
--   [ ] Audio Only.
--   [ ] Video Only (No Audio).
--   [ ] Best Available.
--   [ ] Explain each mode in simple language.
+-   [x] Video + Audio.
+-   [x] Audio Only.
+-   [x] Video Only (No Audio).
+-   [x] Best Available.
+-   [x] Explain each mode in simple language.
+
+The Output Settings panel now offers all four modes after successful
+inspection and resets to Best Available when a new inspection starts.
+Each option explains its behavior and the controls remain disabled until
+media is inspected. This records a session-only choice; mode-specific
+format filtering and download wiring are still pending. `npm.cmd run
+build` passed.
 
 ### Step 6.3 --- Build dynamic format options
 
@@ -1091,8 +1098,8 @@ Mark tasks complete only after they are implemented and verified.
 -   [ ] Phase 13 --- Windows packaging and release
 
 **Last completed phase:** Phase 0 --- Scope and dependency checks\
-**Current task:** Phase 6.1 --- Build the media preview\
-**Next action:** Implement Phase 6.2 output-mode selection, then Phase 6.3 dynamic format options. Phase 5.2 still needs manual playlist, single-item, and unknown-content checks; playlist scope selection remains deferred until it can flow into a real download request. Phase 5.3 classification and Phase 4.3 inspection failures still need manual checks. Before FFmpeg integration/packaging, verify the local candidate's runtime version/configuration and match its provenance and checksums to an upstream release. Phase 3.3 still needs download/Save dialog/file handler integration and acceptance tests; Phase 1 dependency pinning, lockfile commit, and project-license decision remain pending.
+**Current task:** Phase 6.2 --- Build output mode selection\
+**Next action:** Implement Phase 6.3 dynamic format filtering/options, then carry the selected mode and format into the later download request. Phase 5.2 still needs manual playlist, single-item, and unknown-content checks; playlist scope selection remains deferred until it can flow into a real download request. Phase 5.3 classification and Phase 4.3 inspection failures still need manual checks. Before FFmpeg integration/packaging, verify the local candidate's runtime version/configuration and match its provenance and checksums to an upstream release. Phase 3.3 still needs download/Save dialog/file handler integration and acceptance tests; Phase 1 dependency pinning, lockfile commit, and project-license decision remain pending.
 
 ------------------------------------------------------------------------
 

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type JSX } from 'react'
-import type { MediaFormat, MediaInfo } from '../../shared/contracts'
+import type { MediaFormat, MediaInfo, OutputMode } from '../../shared/contracts'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -31,6 +31,33 @@ import {
 } from 'lucide-react'
 
 type Theme = 'light' | 'dark' | 'system'
+
+const OUTPUT_MODE_OPTIONS: {
+  value: OutputMode
+  label: string
+  description: string
+}[] = [
+  {
+    value: 'video-audio',
+    label: 'Video + Audio',
+    description: 'Save the video with sound. Separate streams may need merging.'
+  },
+  {
+    value: 'audio-only',
+    label: 'Audio Only',
+    description: 'Save the audio track without video.'
+  },
+  {
+    value: 'video-only',
+    label: 'Video Only (No Audio)',
+    description: 'Save a video stream without sound, when the source provides one.'
+  },
+  {
+    value: 'best-available',
+    label: 'Best Available',
+    description: 'Use the best compatible format returned for this link.'
+  }
+]
 
 const THEME_OPTIONS: { value: Theme; label: string; icon: typeof Sun }[] = [
   { value: 'light', label: 'Light', icon: Sun },
@@ -109,6 +136,7 @@ export default function App(): JSX.Element {
   const [url, setUrl] = useState('')
   const [clipboardMessage, setClipboardMessage] = useState('')
   const [mediaInfo, setMediaInfo] = useState<MediaInfo | null>(null)
+  const [outputMode, setOutputMode] = useState<OutputMode>('best-available')
   const [inspectionError, setInspectionError] = useState<string | null>(null)
   const [inspectionMessage, setInspectionMessage] = useState('')
   const [isInspecting, setIsInspecting] = useState(false)
@@ -157,6 +185,7 @@ export default function App(): JSX.Element {
     activeRequestId.current = requestId
     setIsInspecting(true)
     setMediaInfo(null)
+    setOutputMode('best-available')
     setInspectionError(null)
     setInspectionMessage('')
 
@@ -650,25 +679,49 @@ export default function App(): JSX.Element {
                   Output Settings
                 </CardTitle>
                 <CardDescription className="text-xs">
-                  Mode and quality selection will be enabled in a later step.
+                  Choose whether to keep the sound, video, or both.
                 </CardDescription>
               </CardHeader>
               <Separator className="bg-[var(--color-border-subtle)]" />
               <CardContent className="space-y-5 p-5">
                 <div className="space-y-2">
-                  <label className="text-xs font-semibold uppercase tracking-widest text-[var(--color-text-subtle)]">
+                  <p className="text-xs font-semibold uppercase tracking-widest text-[var(--color-text-subtle)]">
                     Output mode
-                  </label>
-                  <Select disabled>
-                    <SelectTrigger className="h-11 border-[var(--color-border-subtle)] bg-[var(--color-background-soft)] text-[var(--color-text-subtle)]">
-                      <SelectValue placeholder="Available after inspection" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="placeholder">
-                        Available after inspection
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
+                  </p>
+                  <div role="group" aria-label="Output mode" className="grid gap-2">
+                    {OUTPUT_MODE_OPTIONS.map((option) => {
+                      const isSelected = outputMode === option.value
+                      return (
+                        <Button
+                          key={option.value}
+                          type="button"
+                          variant="outline"
+                          aria-pressed={isSelected}
+                          disabled={!mediaInfo}
+                          onClick={() => setOutputMode(option.value)}
+                          className={`h-auto min-h-14 justify-start whitespace-normal border px-3 py-2 text-left ${
+                            isSelected
+                              ? 'border-[var(--color-focus)] bg-[var(--color-background-soft)]'
+                              : 'border-[var(--color-border-subtle)] bg-[var(--color-surface)]'
+                          }`}
+                        >
+                          <span className="flex flex-col items-start gap-0.5">
+                            <span className="text-xs font-semibold text-[var(--color-text)]">
+                              {option.label}
+                            </span>
+                            <span className="text-[11px] font-normal leading-relaxed text-[var(--color-text-muted)]">
+                              {option.description}
+                            </span>
+                          </span>
+                        </Button>
+                      )
+                    })}
+                  </div>
+                  <p className="text-xs leading-relaxed text-[var(--color-text-subtle)]">
+                    {mediaInfo
+                      ? 'Mode selection is ready. Format and quality choices come next; nothing downloads yet.'
+                      : 'Inspect a link before choosing an output mode.'}
+                  </p>
                 </div>
 
                 <div className="space-y-2">
