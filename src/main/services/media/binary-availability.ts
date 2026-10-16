@@ -15,11 +15,23 @@ const VERSION_OUTPUT_LIMIT_BYTES = 4_096
 const VERSION_TEXT_LIMIT = 128
 
 export function getYtDlpPath(): string {
+  return join(getBinariesDirectory(), 'yt-dlp.exe')
+}
+
+export function getFfmpegDirectory(): string {
+  return join(
+    getBinariesDirectory(),
+    'ffmpeg-n9.0-latest-win64-gpl-9.0',
+    'bin'
+  )
+}
+
+function getBinariesDirectory(): string {
   const binaryDirectory = app.isPackaged
     ? join(process.resourcesPath, 'app.asar.unpacked', 'resources', 'binaries')
     : join(app.getAppPath(), 'resources', 'binaries')
 
-  return join(binaryDirectory, 'win32-x64', 'yt-dlp.exe')
+  return join(binaryDirectory, 'win32-x64')
 }
 
 export async function checkYtDlpAvailability(): Promise<YtDlpAvailability> {

@@ -1,21 +1,69 @@
 import { app, dialog, shell, BrowserWindow } from 'electron'
+import { randomUUID } from 'node:crypto'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
-import type { AppError } from '../shared/contracts'
+import type { AppError, DownloadRequest, DownloadStatus, MediaFormat } from '../shared/contracts'
 import { IPC_CHANNELS } from '../shared/ipc-channels'
 import {
   parseInspectionArgs,
   parseNoArgs,
   parseRequestIdArgs,
   parseSaveDialogArgs,
+  parseDownloadStartArgs,
+  validateDownloadRequest,
   validateSelectedSavePath
 } from './ipc/validators'
 import { registerIpcHandler } from './ipc/register-handler'
 import { checkYtDlpAvailability } from './services/media/binary-availability'
 import { inspectMedia, MediaInspectionError } from './services/media/media-inspector'
 import { cancelYtDlp, YtDlpProcessError } from './services/media/ytdlp-service'
+import { DownloadRunnerError, runVideoAudioDownload } from './services/downloads/download-runner'
+
+let latestInspection: { url: string; formats: MediaFormat[] } | null = null
+let authorizedOutputPath: string | null = null
+let activeDownloadId: string | null = null
+
+class DownloadRequestError extends Error {
+  constructor(readonly appError: AppError) {
+    super(appError.message)
+    this.name = 'DownloadRequestError'
+  }
+}
+
+function publishDownloadStatus(status: DownloadStatus): void {
+  for (const window of BrowserWindow.getAllWindows()) {
+    if (!window.isDestroyed()) {
+      window.webContents.send(IPC_CHANNELS.downloadsStatus, status)
+    }
+  }
+}
+
+function mapDownloadError(error: unknown): AppError {
+  if (error instanceof DownloadRequestError) return error.appError
+  if (error instanceof DownloadRunnerError) {
+    return {
+      code: error.code,
+      message: error.message,
+      retryable: error.code !== 'format-unavailable'
+    }
+  }
+  if (error instanceof YtDlpProcessError) {
+    return {
+      code: error.code === 'timeout' ? 'network-error' : 'download-failed',
+      message: error.code === 'timeout'
+        ? 'The download timed out. Check your connection and try again.'
+        : 'The media download failed. Try again.',
+      retryable: true
+    }
+  }
+  return {
+    code: 'download-failed',
+    message: 'The media download failed. Try again.',
+    retryable: true
+  }
+}
 
 function isInternalUrl(candidate: string): boolean {
   const devUrl = process.env['ELECTRON_RENDERER_URL']
@@ -197,7 +245,13 @@ app.whenReady().then(async () => {
     IPC_CHANNELS.mediaInspectUrl,
     (event) => event.senderFrame === event.sender.mainFrame && isInternalUrl(event.senderFrame.url),
     parseInspectionArgs,
-    inspectMedia,
+    async (requestId, url) => {
+      latestInspection = null
+      authorizedOutputPath = null
+      const mediaInfo = await inspectMedia(requestId, url)
+      latestInspection = { url: mediaInfo.webpageUrl, formats: mediaInfo.formats }
+      return mediaInfo
+    },
     mapInspectionError
   )
   registerIpcHandler(
@@ -230,6 +284,7 @@ app.whenReady().then(async () => {
       if (!validatedPath.success) {
         throw new Error(validatedPath.error)
       }
+      authorizedOutputPath = validatedPath.data
       return validatedPath.data
     },
     () => ({
@@ -237,6 +292,103 @@ app.whenReady().then(async () => {
       message: 'The save location could not be opened or validated. Choose another location.',
       retryable: true
     })
+  )
+  registerIpcHandler(
+    IPC_CHANNELS.downloadsStart,
+    (event) => event.senderFrame === event.sender.mainFrame && isInternalUrl(event.senderFrame.url),
+    parseDownloadStartArgs,
+    (request: DownloadRequest) => {
+      if (activeDownloadId) {
+        throw new DownloadRequestError({
+          code: 'invalid-input',
+          message: 'A download is already in progress.',
+          retryable: false
+        })
+      }
+      if (request.outputMode !== 'video-audio') {
+        throw new DownloadRequestError({
+          code: 'format-unavailable',
+          message: 'Audio-only and video-only downloads are not available yet.',
+          retryable: false
+        })
+      }
+      if (!latestInspection || !authorizedOutputPath) {
+        throw new DownloadRequestError({
+          code: 'invalid-input',
+          message: 'Inspect the media and choose a save location before downloading.',
+          retryable: false
+        })
+      }
+
+      const validated = validateDownloadRequest(
+        request,
+        latestInspection.url,
+        latestInspection.formats,
+        (outputPath) => outputPath.toLowerCase() === authorizedOutputPath?.toLowerCase()
+      )
+      if (!validated.success) {
+        throw new DownloadRequestError({
+          code: 'format-unavailable',
+          message: validated.error,
+          retryable: false
+        })
+      }
+
+      const selectedFormat = latestInspection.formats.find(
+        (format) => format.formatId === validated.data.formatId
+      )
+      if (!selectedFormat || !selectedFormat.hasVideo) {
+        throw new DownloadRequestError({
+          code: 'format-unavailable',
+          message: 'Select a video format returned for this media.',
+          retryable: false
+        })
+      }
+      if (
+        !selectedFormat.hasAudio &&
+        !latestInspection.formats.some((format) => format.hasAudio && !format.hasVideo)
+      ) {
+        throw new DownloadRequestError({
+          code: 'format-unavailable',
+          message: 'This media does not provide a separate audio stream to merge.',
+          retryable: false
+        })
+      }
+
+      const downloadId = 'download-' + randomUUID()
+      activeDownloadId = downloadId
+      authorizedOutputPath = null
+      publishDownloadStatus({
+        downloadId,
+        stage: 'preparing',
+        error: null,
+        result: null
+      })
+
+      void runVideoAudioDownload(downloadId, validated.data, selectedFormat)
+        .then((result) => {
+          publishDownloadStatus({
+            downloadId,
+            stage: 'completed',
+            error: null,
+            result: { downloadId, ...result }
+          })
+        })
+        .catch((error: unknown) => {
+          publishDownloadStatus({
+            downloadId,
+            stage: 'failed',
+            error: mapDownloadError(error),
+            result: null
+          })
+        })
+        .finally(() => {
+          if (activeDownloadId === downloadId) activeDownloadId = null
+        })
+
+      return { downloadId }
+    },
+    mapDownloadError
   )
 
   createWindow()

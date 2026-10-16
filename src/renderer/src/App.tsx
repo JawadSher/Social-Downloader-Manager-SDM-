@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type JSX } from 'react'
-import type { MediaFormat, MediaInfo, OutputMode } from '../../shared/contracts'
+import type { DownloadStatus, MediaFormat, MediaInfo, OutputMode } from '../../shared/contracts'
 import { getFormatExtension, sanitizeFilenameStem } from '../../shared/filename'
 import { Button } from '@/components/ui/button'
 import {
@@ -135,7 +135,8 @@ function getFormatLabel(format: MediaFormat): string {
 
 function getCompatibleFormats(formats: MediaFormat[], mode: OutputMode): MediaFormat[] {
   if (mode === 'video-audio') {
-    return formats.filter((format) => format.hasVideo && format.hasAudio)
+    const hasSeparateAudio = formats.some((format) => format.hasAudio && !format.hasVideo)
+    return formats.filter((format) => format.hasVideo && (format.hasAudio || hasSeparateAudio))
   }
   if (mode === 'audio-only') {
     return formats.filter((format) => format.hasAudio && !format.hasVideo)
@@ -178,7 +179,7 @@ function getNoCompatibleFormatMessage(mediaInfo: MediaInfo, mode: OutputMode): s
   const hasCombinedFormat = mediaInfo.formats.some((format) => format.hasVideo && format.hasAudio)
 
   if (mode === 'video-audio' && hasSeparateVideoAndAudio && !hasCombinedFormat) {
-    return 'The video and audio are available as separate streams. Merging them requires FFmpeg; stream pairing is not available yet.'
+    return 'The video and audio are separate streams. They will be combined with FFmpeg when downloaded.'
   }
   if (mode === 'audio-only' && hasCombinedFormat) {
     return 'Only formats containing video and audio were reported. Extracting audio alone requires FFmpeg.'
@@ -200,6 +201,8 @@ export default function App(): JSX.Element {
   const [selectedOutputPath, setSelectedOutputPath] = useState<string | null>(null)
   const [saveLocationMessage, setSaveLocationMessage] = useState('')
   const [isChoosingSaveLocation, setIsChoosingSaveLocation] = useState(false)
+  const [downloadStatus, setDownloadStatus] = useState<DownloadStatus | null>(null)
+  const [isStartingDownload, setIsStartingDownload] = useState(false)
   const [inspectionError, setInspectionError] = useState<string | null>(null)
   const [inspectionMessage, setInspectionMessage] = useState('')
   const [isInspecting, setIsInspecting] = useState(false)
@@ -208,6 +211,8 @@ export default function App(): JSX.Element {
   useEffect(() => {
     document.documentElement.dataset.theme = theme
   }, [theme])
+
+  useEffect(() => window.sdm.downloads.onStatus(setDownloadStatus), [])
 
   useEffect(() => {
     return () => {
@@ -345,6 +350,31 @@ export default function App(): JSX.Element {
     }
   }
 
+  const handleStartDownload = async (): Promise<void> => {
+    if (!mediaInfo || !selectedFormat || !selectedOutputPath) return
+    if (outputMode !== 'video-audio') {
+      setSaveLocationMessage('Audio-only and video-only downloads are not available yet.')
+      return
+    }
+
+    setIsStartingDownload(true)
+    setSaveLocationMessage('')
+    try {
+      const result = await window.sdm.downloads.start({
+        mediaUrl: mediaInfo.webpageUrl,
+        outputMode,
+        formatId: selectedFormat.formatId,
+        outputPath: selectedOutputPath,
+        audioFormat: null
+      })
+      if (!result.success) setSaveLocationMessage(result.error.message)
+    } catch {
+      setSaveLocationMessage('The download could not be started. Try again.')
+    } finally {
+      setIsStartingDownload(false)
+    }
+  }
+
   const compatibleFormats = mediaInfo ? getCompatibleFormats(mediaInfo.formats, outputMode) : []
   const recommendedFormat = mediaInfo
     ? getRecommendedFormat(mediaInfo.formats, outputMode)
@@ -352,6 +382,11 @@ export default function App(): JSX.Element {
   const selectedFormat = compatibleFormats.find((format) => format.formatId === selectedFormatId) ?? null
   const selectedExtension = getFormatExtension(selectedFormat)
   const safeFilenameStem = sanitizeFilenameStem(filenameStem, selectedExtension)
+  const isDownloadActive =
+    downloadStatus?.stage === 'preparing' ||
+    downloadStatus?.stage === 'downloading' ||
+    downloadStatus?.stage === 'merging' ||
+    downloadStatus?.stage === 'converting'
 
   const handlePaste = async (): Promise<void> => {
     setClipboardMessage('')
@@ -816,7 +851,7 @@ export default function App(): JSX.Element {
                           type="button"
                           variant="outline"
                           aria-pressed={isSelected}
-                          disabled={!mediaInfo}
+                    disabled={!mediaInfo || isDownloadActive}
                           onClick={() => handleOutputModeChange(option.value)}
                           className={`h-auto min-h-14 justify-start whitespace-normal border px-3 py-2 text-left ${
                             isSelected
@@ -849,7 +884,7 @@ export default function App(): JSX.Element {
                   </label>
                   <Select
                     value={selectedFormatId}
-                    disabled={!mediaInfo || compatibleFormats.length === 0}
+                    disabled={!mediaInfo || compatibleFormats.length === 0 || isDownloadActive}
                     onValueChange={(formatId) => {
                       setSelectedFormatId(formatId)
                       setSelectedOutputPath(null)
@@ -890,7 +925,7 @@ export default function App(): JSX.Element {
                     <Input
                       id="output-filename"
                       value={safeFilenameStem}
-                      disabled={!mediaInfo}
+                      disabled={!mediaInfo || isDownloadActive}
                       maxLength={255}
                       autoComplete="off"
                       onChange={(event) =>
@@ -916,7 +951,7 @@ export default function App(): JSX.Element {
                   <Button
                     type="button"
                     variant="outline"
-                    disabled={!selectedFormat || !selectedExtension || isChoosingSaveLocation}
+                    disabled={!selectedFormat || !selectedExtension || isChoosingSaveLocation || isDownloadActive}
                     onClick={() => void handleChooseSaveLocation()}
                     className="w-full border-[var(--color-border-subtle)] bg-[var(--color-background-soft)]"
                   >
@@ -927,6 +962,30 @@ export default function App(): JSX.Element {
                     )}
                     Choose save location
                   </Button>
+                  <Button
+                    type="button"
+                    disabled={
+                      !selectedOutputPath ||
+                      !selectedFormat ||
+                      outputMode !== 'video-audio' ||
+                      isStartingDownload ||
+                      isDownloadActive
+                    }
+                    onClick={() => void handleStartDownload()}
+                    className="w-full"
+                  >
+                    {isStartingDownload ? (
+                      <LoaderCircle className="mr-2 size-4 animate-spin" />
+                    ) : (
+                      <Download className="mr-2 size-4" />
+                    )}
+                    Download video + audio
+                  </Button>
+                  {outputMode !== 'video-audio' && (
+                    <p className="text-xs text-[var(--color-text-subtle)]">
+                      Audio-only and video-only downloads are coming in later steps.
+                    </p>
+                  )}
                   {selectedOutputPath && (
                     <p className="break-all text-xs text-[var(--color-text-muted)]" role="status">
                       Selected destination: {selectedOutputPath}
@@ -952,14 +1011,38 @@ export default function App(): JSX.Element {
               <Separator className="bg-[var(--color-border-subtle)]" />
               <CardContent className="p-5">
                 <div className="rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-background-soft)] p-4">
-                  <p className="text-sm font-medium text-[var(--color-text-muted)]">
-                    No active download
-                  </p>
-                  <p className="mt-1 text-xs leading-relaxed text-[var(--color-text-subtle)]">
-                    Queue, destination folder, and controls will appear here
-                    once downloading is implemented. Progress will only be shown
-                    during a real download.
-                  </p>
+                  {downloadStatus ? (
+                    <>
+                      <p className="text-sm font-medium text-[var(--color-text-muted)]">
+                        {downloadStatus.stage === 'completed'
+                          ? 'Download complete'
+                          : downloadStatus.stage === 'failed'
+                            ? 'Download failed'
+                            : downloadStatus.stage === 'downloading'
+                              ? 'Downloading'
+                              : 'Preparing download'}
+                      </p>
+                      {downloadStatus.error && (
+                        <p className="mt-1 text-xs leading-relaxed text-[var(--color-text-subtle)]">
+                          {downloadStatus.error.message}
+                        </p>
+                      )}
+                      {downloadStatus.result && (
+                        <p className="mt-1 break-all text-xs leading-relaxed text-[var(--color-text-subtle)]">
+                          Saved to {downloadStatus.result.outputPath}
+                        </p>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-sm font-medium text-[var(--color-text-muted)]">
+                        No active download
+                      </p>
+                      <p className="mt-1 text-xs leading-relaxed text-[var(--color-text-subtle)]">
+                        Choose a format and save location to download video with audio.
+                      </p>
+                    </>
+                  )}
                 </div>
               </CardContent>
             </Card>

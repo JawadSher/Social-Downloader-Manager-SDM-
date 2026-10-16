@@ -1,0 +1,123 @@
+import { stat } from 'node:fs/promises'
+import { resolve } from 'node:path'
+import type { DownloadRequest, MediaFormat } from '../../../shared/contracts'
+import { getFfmpegDirectory } from '../media/binary-availability'
+import { runYtDlp, YtDlpProcessError } from '../media/ytdlp-service'
+
+const DOWNLOAD_TIMEOUT_MS = 30 * 60 * 1000
+const MERGEABLE_CONTAINERS = new Set(['avi', 'flv', 'mkv', 'mov', 'mp4', 'webm'])
+
+export type VideoAudioDownloadResult = {
+  outputPath: string
+  fileSizeBytes: number
+}
+
+export class DownloadRunnerError extends Error {
+  constructor(
+    readonly code: 'ffmpeg-missing' | 'format-unavailable' | 'processing-failed' | 'download-failed',
+    message: string
+  ) {
+    super(message)
+    this.name = 'DownloadRunnerError'
+  }
+}
+
+export async function runVideoAudioDownload(
+  downloadId: string,
+  request: DownloadRequest,
+  format: MediaFormat
+): Promise<VideoAudioDownloadResult> {
+  const needsMerge = !format.hasAudio
+  const ffmpegDirectory = getFfmpegDirectory()
+
+  if (needsMerge) {
+    try {
+      const ffmpegInfo = await stat(resolve(ffmpegDirectory, 'ffmpeg.exe'))
+      if (!ffmpegInfo.isFile()) throw new Error('FFmpeg is not a file.')
+    } catch {
+      throw new DownloadRunnerError(
+        'ffmpeg-missing',
+        'FFmpeg is required to combine this video with its separate audio stream.'
+      )
+    }
+
+    if (!MERGEABLE_CONTAINERS.has(format.extension.toLowerCase())) {
+      throw new DownloadRunnerError(
+        'format-unavailable',
+        'The selected video format cannot be merged into its reported container.'
+      )
+    }
+  }
+
+  const formatSelector = needsMerge
+    ? format.formatId + '+bestaudio'
+    : format.formatId
+  const args = [
+    '--ignore-config',
+    '--no-warnings',
+    '--no-progress',
+    '--force-overwrites',
+    '--format',
+    formatSelector,
+    '--output',
+    request.outputPath,
+    '--print',
+    'after_move:filepath'
+  ]
+
+  if (needsMerge) {
+    args.push('--ffmpeg-location', ffmpegDirectory, '--merge-output-format', format.extension)
+  }
+  args.push(request.mediaUrl)
+
+  try {
+    const { stdout } = await runYtDlp(args, {
+      requestId: downloadId,
+      timeoutMs: DOWNLOAD_TIMEOUT_MS,
+      maxStdoutBytes: 64 * 1024,
+      maxStderrBytes: 1024 * 1024
+    })
+    const reportedPath = stdout
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .at(-1)
+
+    if (!reportedPath || resolve(reportedPath).toLowerCase() !== resolve(request.outputPath).toLowerCase()) {
+      throw new DownloadRunnerError(
+        'download-failed',
+        'yt-dlp completed without confirming the selected output path.'
+      )
+    }
+
+    const outputInfo = await stat(request.outputPath)
+    if (!outputInfo.isFile() || outputInfo.size <= 0) {
+      throw new DownloadRunnerError(
+        'download-failed',
+        'The completed output file could not be verified.'
+      )
+    }
+
+    return { outputPath: request.outputPath, fileSizeBytes: outputInfo.size }
+  } catch (error) {
+    if (error instanceof DownloadRunnerError) throw error
+    if (error instanceof YtDlpProcessError) {
+      const diagnostic = error.diagnostic?.toLowerCase() ?? ''
+      if (/ffmpeg|merger|post.?process/.test(diagnostic)) {
+        throw new DownloadRunnerError(
+          'processing-failed',
+          'Media processing failed. Check that FFmpeg is installed and try again.'
+        )
+      }
+      if (/unable to download|timed? out|connection|temporary failure|network|http error/.test(diagnostic)) {
+        throw new DownloadRunnerError(
+          'download-failed',
+          'A network or source error interrupted the download.'
+        )
+      }
+      throw new DownloadRunnerError('download-failed', 'The media download failed. Try again.')
+    }
+    throw new DownloadRunnerError('download-failed', 'The media download could not be completed.')
+  }
+}
+

@@ -826,11 +826,18 @@ confirms a destination and filename.
 
 ### Step 8.1 --- Video + Audio
 
--   [ ] Select a compatible video/audio combination for the requested
+-   [x] Select a compatible video/audio combination for the requested
     quality.
--   [ ] Merge separate streams with FFmpeg where needed.
--   [ ] Handle missing FFmpeg and merge errors.
--   [ ] Confirm the final output exists before success.
+-   [x] Merge separate streams with FFmpeg where needed.
+-   [x] Handle missing FFmpeg and merge errors.
+-   [x] Confirm the final output exists before success.
+
+The Video + Audio download path now validates the selected format against
+the latest inspection, combines separate video and audio streams through
+the local FFmpeg binary when needed, and reports completion only after
+yt-dlp confirms the selected path and the main process verifies the file.
+The production build passed. A real media download and FFmpeg merge have
+not yet been manually exercised.
 
 ### Step 8.2 --- Audio Only
 
@@ -1105,9 +1112,9 @@ Mark tasks complete only after they are implemented and verified.
 -   [ ] Phase 12 --- Security and reliability
 -   [ ] Phase 13 --- Windows packaging and release
 
-**Last completed phase:** Phase 0 --- Scope and dependency checks\
-**Current task:** Phase 6.3 --- Build dynamic format options\
-**Next action:** Verify mode/format combinations in the running UI, then connect the selected mode, format, and playlist scope to the download request and Save dialog. Phase 5.2 still needs manual playlist, single-item, and unknown-content checks; playlist scope selection remains deferred until it can flow into a real download request. Phase 5.3 classification and Phase 4.3 inspection failures still need manual checks. Before FFmpeg integration/packaging, verify the local candidate's runtime version/configuration and match its provenance and checksums to an upstream release. Phase 3.3 still needs download/Save dialog/file handler integration and acceptance tests; Phase 1 dependency pinning, lockfile commit, and project-license decision remain pending.
+**Last completed phase:** Phase 7 --- Save dialog and output filename\
+**Current task:** Phase 8.1 --- Video + Audio
+**Next action:** Manually verify a combined-format download and a separate-stream FFmpeg merge, then continue to Step 8.2 (Audio Only). Phase 5.2 still needs manual playlist, single-item, and unknown-content checks; playlist scope selection remains deferred until it can flow into a real download request. Phase 5.3 classification and Phase 4.3 inspection failures still need manual checks. Before FFmpeg packaging, verify the local candidate's runtime version/configuration and match its provenance and checksums to an upstream release. Phase 1 dependency pinning, lockfile commit, and project-license decision remain pending.
 
 ------------------------------------------------------------------------
 
