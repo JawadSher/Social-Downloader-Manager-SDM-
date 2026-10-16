@@ -229,6 +229,7 @@ export default function App(): JSX.Element {
   const [isChoosingSaveLocation, setIsChoosingSaveLocation] = useState(false)
   const [downloadStatus, setDownloadStatus] = useState<DownloadStatus | null>(null)
   const [downloadProgress, setDownloadProgress] = useState<DownloadProgress | null>(null)
+  const [isCancellingDownload, setIsCancellingDownload] = useState(false)
   const [isStartingDownload, setIsStartingDownload] = useState(false)
   const [inspectionError, setInspectionError] = useState<string | null>(null)
   const [inspectionMessage, setInspectionMessage] = useState('')
@@ -432,6 +433,19 @@ export default function App(): JSX.Element {
   const currentDownloadStage = downloadProgress && downloadProgress.downloadId === downloadStatus?.downloadId
     ? downloadProgress.stage
     : downloadStatus?.stage
+
+  const handleCancelDownload = async (): Promise<void> => {
+    if (!downloadStatus || !isDownloadActive || isCancellingDownload) return
+    setIsCancellingDownload(true)
+    try {
+      const result = await window.sdm.downloads.cancel(downloadStatus.downloadId)
+      if (!result.success) setSaveLocationMessage(result.error.message)
+    } catch {
+      setSaveLocationMessage('The download could not be cancelled. Try again.')
+    } finally {
+      setIsCancellingDownload(false)
+    }
+  }
 
   const handlePaste = async (): Promise<void> => {
     setClipboardMessage('')
@@ -1148,6 +1162,22 @@ export default function App(): JSX.Element {
                             </span>
                           </div>
                         </div>
+                      )}
+                      {isDownloadActive && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          disabled={isCancellingDownload}
+                          onClick={() => void handleCancelDownload()}
+                          className="mt-3 h-9 border-[var(--color-border-subtle)] bg-[var(--color-surface)]"
+                        >
+                          {isCancellingDownload ? (
+                            <LoaderCircle className="mr-2 size-4 animate-spin" />
+                          ) : (
+                            <X className="mr-2 size-4" />
+                          )}
+                          {isCancellingDownload ? 'Cancelling…' : 'Cancel download'}
+                        </Button>
                       )}
                       {downloadStatus.error && (
                         <p className="mt-1 text-xs leading-relaxed text-[var(--color-text-subtle)]">

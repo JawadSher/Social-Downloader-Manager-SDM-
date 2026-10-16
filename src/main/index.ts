@@ -18,7 +18,7 @@ import {
 import { registerIpcHandler } from './ipc/register-handler'
 import { checkYtDlpAvailability } from './services/media/binary-availability'
 import { inspectMedia, MediaInspectionError } from './services/media/media-inspector'
-import { cancelYtDlp, YtDlpProcessError } from './services/media/ytdlp-service'
+import { cancelYtDlp, clearYtDlpCancellation, YtDlpProcessError } from './services/media/ytdlp-service'
 import {
   DownloadRunnerError,
   runAudioOnlyDownload,
@@ -71,7 +71,7 @@ function mapDownloadError(error: unknown): AppError {
     return {
       code: error.code,
       message: error.message,
-      retryable: error.code !== 'format-unavailable'
+      retryable: error.code !== 'format-unavailable' && error.code !== 'cancelled'
     }
   }
   if (error instanceof YtDlpProcessError) {
@@ -424,20 +424,37 @@ app.whenReady().then(async () => {
           })
         })
         .catch((error: unknown) => {
+          const appError = mapDownloadError(error)
           publishDownloadStatus({
             downloadId,
-            stage: 'failed',
-            error: mapDownloadError(error),
+            stage: appError.code === 'cancelled' ? 'cancelled' : 'failed',
+            error: appError,
             result: null
           })
         })
         .finally(() => {
+          clearYtDlpCancellation(downloadId)
           if (activeDownloadId === downloadId) activeDownloadId = null
         })
 
       return { downloadId }
     },
     mapDownloadError
+  )
+
+  registerIpcHandler(
+    IPC_CHANNELS.downloadsCancel,
+    (event) => event.senderFrame === event.sender.mainFrame && isInternalUrl(event.senderFrame.url),
+    parseRequestIdArgs,
+    (downloadId) => {
+      if (downloadId !== activeDownloadId || !cancelYtDlp(downloadId, true)) {
+        throw new DownloadRequestError({
+          code: 'invalid-input',
+          message: 'This download is no longer active.',
+          retryable: false
+        })
+      }
+    }
   )
 
   createWindow()

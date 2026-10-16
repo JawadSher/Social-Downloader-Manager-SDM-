@@ -913,6 +913,38 @@ download/merge/conversion/terminal status labels. `npm.cmd run build`
 passed. Live downloads have not yet been checked for progress-template
 compatibility across source extractors.
 
+### Step 9.2 --- Cancel behavior
+
+-   [x] Implement cancellation for inspection and active download.
+-   [x] Stop child processes safely.
+-   [x] Decide and document how partial files are handled.
+-   [x] Do not show pause/resume unless it is implemented and tested.
+-   [ ] Ensure no orphaned yt-dlp/FFmpeg process remains after
+    cancellation.
+
+The download status panel now exposes Cancel while a job is active. The
+main process accepts cancellation only for its active download; the
+process service handles the start/cancel race, and on Windows terminates
+the yt-dlp process tree with `taskkill.exe /T /F` using argument-array
+spawning. Each job uses a unique temporary directory; cancellation removes
+that directory, the selected output, and its `.part` file. The app does
+not offer pause/resume or promise resume after cancellation. `npm.cmd run
+build` passed. A live cancellation run is still needed to confirm partial
+file cleanup and that no yt-dlp/FFmpeg child remains.
+
+### Step 9.3 --- Completion
+
+-   [ ] Show "Download complete."
+-   [ ] Show the final file name.
+-   [ ] Add Open File.
+-   [ ] Add Open Folder.
+-   [ ] Keep the completion state in memory only while the current app
+    session needs it.
+-   [ ] Do not add the result to a persistent history.
+
+**Acceptance criteria:** Progress stays responsive, cancellation works,
+and completion only appears after the output is verified.
+
 ------------------------------------------------------------------------
 
 ## Phase 10 --- Error UX and toast notifications
@@ -1124,8 +1156,8 @@ Mark tasks complete only after they are implemented and verified.
 -   [ ] Phase 13 --- Windows packaging and release
 
 **Last completed phase:** Phase 7 --- Save dialog and output filename\
-**Current task:** Phase 9.1 --- Progress parsing
-**Next action:** Manually verify progress parsing and presentation with a live download, then implement Phase 9.2 (Cancel behavior). Previous manual checks remain pending: Phase 5.2 playlist/content checks, Phase 5.3 and Phase 4.3 error checks, and Phase 8 mode-specific downloads. Before bundling FFmpeg, complete the required source, checksum, and license review. Phase 1 dependency pinning, lockfile commit, and project-license decision remain pending.
+**Current task:** Phase 9.2 --- Cancel behavior
+**Next action:** Run a live cancellation check and confirm partial-file cleanup and process-tree shutdown, then implement Phase 9.3 (Completion). Manual checks remain pending for Phase 5.2 playlist/content cases, Phase 5.3 and Phase 4.3 errors, Phase 8 mode-specific downloads, and Phase 9.1 live progress. Before bundling FFmpeg, complete the required source, checksum, and license review. Phase 1 dependency pinning, lockfile commit, and project-license decision remain pending.
 
 ------------------------------------------------------------------------
 

@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process'
-import { stat } from 'node:fs/promises'
-import { resolve } from 'node:path'
+import { mkdtemp, rm, stat, unlink } from 'node:fs/promises'
+import { dirname, join, resolve } from 'node:path'
 import type { DownloadProgress, DownloadRequest, MediaFormat } from '../../../shared/contracts'
 import { getFfprobePath, getFfmpegDirectory } from '../media/binary-availability'
 import { runYtDlp, YtDlpProcessError } from '../media/ytdlp-service'
@@ -49,12 +49,27 @@ export class DownloadRunnerError extends Error {
       | 'format-unavailable'
       | 'processing-failed'
       | 'conversion-failed'
+      | 'cancelled'
       | 'download-failed',
     message: string
   ) {
     super(message)
     this.name = 'DownloadRunnerError'
   }
+}
+
+async function createTemporaryDirectory(outputPath: string, downloadId: string): Promise<string> {
+  return mkdtemp(join(dirname(outputPath), `.sdm-download-${downloadId}-`))
+}
+
+async function removeTemporaryDirectory(directory: string): Promise<void> {
+  await rm(directory, { recursive: true, force: true }).catch(() => undefined)
+}
+
+async function removeCancelledOutput(outputPath: string): Promise<void> {
+  await Promise.all(
+    [outputPath, `${outputPath}.part`].map((path) => unlink(path).catch(() => undefined))
+  )
 }
 
 export async function runVideoAudioDownload(
@@ -85,6 +100,7 @@ export async function runVideoAudioDownload(
     }
   }
 
+  const temporaryDirectory = await createTemporaryDirectory(request.outputPath, downloadId)
   const formatSelector = needsMerge
     ? format.formatId + '+bestaudio'
     : format.formatId
@@ -95,6 +111,8 @@ export async function runVideoAudioDownload(
     '--force-overwrites',
     '--format',
     formatSelector,
+    '--paths',
+    `temp:${temporaryDirectory}`,
     '--output',
     request.outputPath,
     '--print',
@@ -135,10 +153,16 @@ export async function runVideoAudioDownload(
       )
     }
 
+    await removeTemporaryDirectory(temporaryDirectory)
     return { outputPath: request.outputPath, fileSizeBytes: outputInfo.size }
   } catch (error) {
+    await removeTemporaryDirectory(temporaryDirectory)
     if (error instanceof DownloadRunnerError) throw error
     if (error instanceof YtDlpProcessError) {
+      if (error.code === 'cancelled') {
+        await removeCancelledOutput(request.outputPath)
+        throw new DownloadRunnerError('cancelled', 'Download cancelled. Partial files were removed.')
+      }
       const diagnostic = error.diagnostic?.toLowerCase() ?? ''
       if (/ffmpeg|merger|post.?process/.test(diagnostic)) {
         throw new DownloadRunnerError(
@@ -179,6 +203,7 @@ export async function runAudioOnlyDownload(
     }
   }
 
+  const temporaryDirectory = await createTemporaryDirectory(request.outputPath, downloadId)
   const args = [
     '--ignore-config',
     '--no-warnings',
@@ -186,6 +211,8 @@ export async function runAudioOnlyDownload(
     '--force-overwrites',
     '--format',
     format.formatId,
+    '--paths',
+    `temp:${temporaryDirectory}`,
     '--output',
     request.outputPath
   ]
@@ -234,10 +261,16 @@ export async function runAudioOnlyDownload(
       )
     }
 
+    await removeTemporaryDirectory(temporaryDirectory)
     return { outputPath: request.outputPath, fileSizeBytes: outputInfo.size }
   } catch (error) {
+    await removeTemporaryDirectory(temporaryDirectory)
     if (error instanceof DownloadRunnerError) throw error
     if (error instanceof YtDlpProcessError) {
+      if (error.code === 'cancelled') {
+        await removeCancelledOutput(request.outputPath)
+        throw new DownloadRunnerError('cancelled', 'Download cancelled. Partial files were removed.')
+      }
       const diagnostic = error.diagnostic?.toLowerCase() ?? ''
       if (/unable to download|timed? out|connection|temporary failure|network|http error/.test(diagnostic)) {
         throw new DownloadRunnerError(
@@ -275,6 +308,7 @@ export async function runVideoOnlyDownload(
     )
   }
 
+  const temporaryDirectory = await createTemporaryDirectory(request.outputPath, downloadId)
   const args = [
     '--ignore-config',
     '--no-warnings',
@@ -282,6 +316,8 @@ export async function runVideoOnlyDownload(
     '--force-overwrites',
     '--format',
     format.formatId,
+    '--paths',
+    `temp:${temporaryDirectory}`,
     '--output',
     request.outputPath,
     '--print',
@@ -328,10 +364,16 @@ export async function runVideoOnlyDownload(
       }
     }
 
+    await removeTemporaryDirectory(temporaryDirectory)
     return { outputPath: request.outputPath, fileSizeBytes: outputInfo.size }
   } catch (error) {
+    await removeTemporaryDirectory(temporaryDirectory)
     if (error instanceof DownloadRunnerError) throw error
     if (error instanceof YtDlpProcessError) {
+      if (error.code === 'cancelled') {
+        await removeCancelledOutput(request.outputPath)
+        throw new DownloadRunnerError('cancelled', 'Download cancelled. Partial files were removed.')
+      }
       const diagnostic = error.diagnostic?.toLowerCase() ?? ''
       if (/unable to download|timed? out|connection|temporary failure|network|http error/.test(diagnostic)) {
         throw new DownloadRunnerError('download-failed', 'A network or source error interrupted the video download.')

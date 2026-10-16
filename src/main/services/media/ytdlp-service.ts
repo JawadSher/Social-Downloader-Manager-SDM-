@@ -52,6 +52,8 @@ type ActiveProcess = {
 }
 
 const activeProcesses = new Map<string, ActiveProcess>()
+const pendingCancellations = new Set<string>()
+const MAX_PENDING_CANCELLATIONS = 100
 
 /**
  * Runs yt-dlp with fixed executable resolution and argument-array spawning.
@@ -63,6 +65,10 @@ export function runYtDlp(
 ): Promise<YtDlpProcessResult> {
   const validationError = validateOptions(args, options)
   if (validationError) return Promise.reject(validationError)
+
+  if (pendingCancellations.delete(options.requestId)) {
+    return Promise.reject(new YtDlpProcessError('cancelled', 'The yt-dlp request was cancelled.'))
+  }
 
   const argsKey = JSON.stringify(args)
   const existing = activeProcesses.get(options.requestId)
@@ -101,12 +107,21 @@ export function runYtDlp(
 }
 
 /** Stop a running yt-dlp operation identified by its caller-owned request ID. */
-export function cancelYtDlp(requestId: string): boolean {
+export function cancelYtDlp(requestId: string, queueIfNotRunning = false): boolean {
   if (!isValidRequestId(requestId)) return false
   const active = activeProcesses.get(requestId)
-  if (!active) return false
+  if (!active) {
+    if (!queueIfNotRunning) return false
+    if (pendingCancellations.size >= MAX_PENDING_CANCELLATIONS) return false
+    pendingCancellations.add(requestId)
+    return true
+  }
   active.cancel()
   return true
+}
+
+export function clearYtDlpCancellation(requestId: string): void {
+  if (isValidRequestId(requestId)) pendingCancellations.delete(requestId)
 }
 
 function validateOptions(
@@ -203,7 +218,7 @@ function startYtDlpProcess(
     const terminate = (error: YtDlpProcessError): void => {
       if (terminalError || settled) return
       terminalError = error
-      child.kill()
+      terminateProcessTree(child)
     }
 
     const consumeStdoutLines = (chunk: string, flush = false): void => {
@@ -305,6 +320,28 @@ function startYtDlpProcess(
   })
 
   return operation
+}
+
+function terminateProcessTree(child: ChildProcessByStdio<null, Readable, Readable>): void {
+  if (process.platform !== 'win32' || !child.pid) {
+    child.kill()
+    return
+  }
+
+  let fallbackTimer: NodeJS.Timeout | undefined
+  const taskkill = spawn('taskkill.exe', ['/PID', String(child.pid), '/T', '/F'], {
+    windowsHide: true,
+    shell: false,
+    stdio: 'ignore'
+  })
+  fallbackTimer = setTimeout(() => child.kill(), 2_000)
+  taskkill.once('close', () => {
+    if (fallbackTimer) clearTimeout(fallbackTimer)
+  })
+  taskkill.once('error', () => {
+    if (fallbackTimer) clearTimeout(fallbackTimer)
+    child.kill()
+  })
 }
 
 function redactSensitiveUrlParameters(text: string): string {
