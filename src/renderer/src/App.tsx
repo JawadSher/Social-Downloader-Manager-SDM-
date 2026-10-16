@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type JSX } from 'react'
 import type { MediaFormat, MediaInfo, OutputMode } from '../../shared/contracts'
+import { getFormatExtension, sanitizeFilenameStem } from '../../shared/filename'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -194,6 +195,7 @@ export default function App(): JSX.Element {
   const [mediaInfo, setMediaInfo] = useState<MediaInfo | null>(null)
   const [outputMode, setOutputMode] = useState<OutputMode>('best-available')
   const [selectedFormatId, setSelectedFormatId] = useState('')
+  const [filenameStem, setFilenameStem] = useState('')
   const [inspectionError, setInspectionError] = useState<string | null>(null)
   const [inspectionMessage, setInspectionMessage] = useState('')
   const [isInspecting, setIsInspecting] = useState(false)
@@ -221,6 +223,7 @@ export default function App(): JSX.Element {
     }
     setIsInspecting(false)
     setMediaInfo(null)
+    setFilenameStem('')
     setInspectionError(null)
     setInspectionMessage('')
   }
@@ -242,6 +245,7 @@ export default function App(): JSX.Element {
     activeRequestId.current = requestId
     setIsInspecting(true)
     setMediaInfo(null)
+    setFilenameStem('')
     setOutputMode('best-available')
     setSelectedFormatId('')
     setInspectionError(null)
@@ -260,9 +264,11 @@ export default function App(): JSX.Element {
         return
       }
 
+      const initialFormat = getRecommendedFormat(result.data.formats, 'best-available')
       setMediaInfo(result.data)
-      setSelectedFormatId(
-        getRecommendedFormat(result.data.formats, 'best-available')?.formatId ?? ''
+      setSelectedFormatId(initialFormat?.formatId ?? '')
+      setFilenameStem(
+        sanitizeFilenameStem(result.data.title, getFormatExtension(initialFormat)) || 'media'
       )
       setInspectionMessage('Media information retrieved. No media was downloaded.')
     } catch {
@@ -284,6 +290,7 @@ export default function App(): JSX.Element {
     activeRequestId.current = null
     setIsInspecting(false)
     setMediaInfo(null)
+    setFilenameStem('')
     setInspectionError(null)
     setInspectionMessage('Inspection cancelled.')
     void window.sdm.media.cancelInspection(requestId).catch(() => undefined)
@@ -305,6 +312,8 @@ export default function App(): JSX.Element {
     ? getRecommendedFormat(mediaInfo.formats, outputMode)
     : null
   const selectedFormat = compatibleFormats.find((format) => format.formatId === selectedFormatId) ?? null
+  const selectedExtension = getFormatExtension(selectedFormat)
+  const safeFilenameStem = sanitizeFilenameStem(filenameStem, selectedExtension)
 
   const handlePaste = async (): Promise<void> => {
     setClipboardMessage('')
@@ -825,6 +834,38 @@ export default function App(): JSX.Element {
                       : mediaInfo
                         ? getNoCompatibleFormatMessage(mediaInfo, outputMode)
                         : 'Inspect a link to populate formats from the extractor.'}
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <label
+                    htmlFor="output-filename"
+                    className="text-xs font-semibold uppercase tracking-widest text-[var(--color-text-subtle)]"
+                  >
+                    Output filename
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      id="output-filename"
+                      value={safeFilenameStem}
+                      disabled={!mediaInfo}
+                      maxLength={255}
+                      autoComplete="off"
+                      onChange={(event) =>
+                        setFilenameStem(sanitizeFilenameStem(event.target.value, selectedExtension))
+                      }
+                      placeholder="Filename"
+                      aria-describedby="output-filename-help"
+                      className="min-w-0 border-[var(--color-border-subtle)] bg-[var(--color-background-soft)]"
+                    />
+                    <span className="shrink-0 text-sm text-[var(--color-text-muted)]" aria-live="polite">
+                      {selectedExtension ? `.${selectedExtension}` : 'Extension unavailable'}
+                    </span>
+                  </div>
+                  <p id="output-filename-help" className="text-xs leading-relaxed text-[var(--color-text-subtle)]">
+                    {selectedExtension
+                      ? `Suggested name: ${safeFilenameStem || 'media'}.${selectedExtension}. The extension follows the selected format.`
+                      : 'Inspect media and select a format with a reported extension to complete the suggested filename.'}
                   </p>
                 </div>
               </CardContent>

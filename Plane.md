@@ -801,11 +801,11 @@ hardcoded demo data.
 
 ### Step 7.1 --- Suggest a filename
 
--   [ ] Build a suggested filename from the media title.
--   [ ] Sanitize Windows-invalid characters and reserved names.
--   [ ] Choose the extension based on the actual selected output format.
--   [ ] Do not force `.mp4` if the user chose another compatible format.
--   [ ] Allow the user to edit the filename.
+-   [x] Build a suggested filename from the media title.
+-   [x] Sanitize Windows-invalid characters and reserved names.
+-   [x] Choose the extension based on the actual selected output format.
+-   [x] Do not force `.mp4` if the user chose another compatible format.
+-   [x] Allow the user to edit the filename.
 
 ### Step 7.2 --- Choose the output location
 
