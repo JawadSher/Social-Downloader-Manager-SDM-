@@ -775,14 +775,22 @@ build` passed.
 
 ### Step 6.3 --- Build dynamic format options
 
--   [ ] Populate options from extracted formats.
--   [ ] Display resolution, extension/container, FPS, size when known,
+-   [x] Populate options from extracted formats.
+-   [x] Display resolution, extension/container, FPS, size when known,
     and audio presence.
--   [ ] Filter out incompatible formats for the selected mode.
--   [ ] Offer only available resolutions.
--   [ ] Mark a recommended option.
--   [ ] Explain when FFmpeg is required.
--   [ ] Handle no compatible format gracefully.
+-   [x] Filter out incompatible formats for the selected mode.
+-   [x] Offer only available resolutions.
+-   [x] Mark a recommended option.
+-   [x] Explain when FFmpeg is required.
+-   [x] Handle no compatible format gracefully.
+
+The format selector now uses only returned extractor formats. It filters
+formats by output mode, chooses a recommended compatible format, and
+displays the reported resolution, container, FPS, size, and audio/video
+presence. Missing-compatible-format messages explain separate-stream
+merging or audio extraction/removal requirements when applicable. The
+choice remains session-only and does not start a download. `npm.cmd run
+build` passed; mode/format combinations still need a manual UI check.
 
 **Acceptance criteria:** Format list reflects the actual URL, not
 hardcoded demo data.
@@ -1098,8 +1106,8 @@ Mark tasks complete only after they are implemented and verified.
 -   [ ] Phase 13 --- Windows packaging and release
 
 **Last completed phase:** Phase 0 --- Scope and dependency checks\
-**Current task:** Phase 6.2 --- Build output mode selection\
-**Next action:** Implement Phase 6.3 dynamic format filtering/options, then carry the selected mode and format into the later download request. Phase 5.2 still needs manual playlist, single-item, and unknown-content checks; playlist scope selection remains deferred until it can flow into a real download request. Phase 5.3 classification and Phase 4.3 inspection failures still need manual checks. Before FFmpeg integration/packaging, verify the local candidate's runtime version/configuration and match its provenance and checksums to an upstream release. Phase 3.3 still needs download/Save dialog/file handler integration and acceptance tests; Phase 1 dependency pinning, lockfile commit, and project-license decision remain pending.
+**Current task:** Phase 6.3 --- Build dynamic format options\
+**Next action:** Verify mode/format combinations in the running UI, then connect the selected mode, format, and playlist scope to the download request and Save dialog. Phase 5.2 still needs manual playlist, single-item, and unknown-content checks; playlist scope selection remains deferred until it can flow into a real download request. Phase 5.3 classification and Phase 4.3 inspection failures still need manual checks. Before FFmpeg integration/packaging, verify the local candidate's runtime version/configuration and match its provenance and checksums to an upstream release. Phase 3.3 still needs download/Save dialog/file handler integration and acceptance tests; Phase 1 dependency pinning, lockfile commit, and project-license decision remain pending.
 
 ------------------------------------------------------------------------
 

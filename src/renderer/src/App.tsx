@@ -131,12 +131,69 @@ function getFormatLabel(format: MediaFormat): string {
   return parts.filter(Boolean).join(' · ')
 }
 
+function getCompatibleFormats(formats: MediaFormat[], mode: OutputMode): MediaFormat[] {
+  if (mode === 'video-audio') {
+    return formats.filter((format) => format.hasVideo && format.hasAudio)
+  }
+  if (mode === 'audio-only') {
+    return formats.filter((format) => format.hasAudio && !format.hasVideo)
+  }
+  if (mode === 'video-only') {
+    return formats.filter((format) => format.hasVideo && !format.hasAudio)
+  }
+  return formats
+}
+
+function getRecommendedFormat(formats: MediaFormat[], mode: OutputMode): MediaFormat | null {
+  const compatible = getCompatibleFormats(formats, mode)
+  if (compatible.length === 0) return null
+
+  if (mode === 'audio-only') return compatible[0]
+  if (mode === 'best-available' && !compatible.some((format) => format.hasVideo)) {
+    return compatible[0]
+  }
+
+  return [...compatible].sort((left, right) => {
+    const heightDifference = (right.height ?? 0) - (left.height ?? 0)
+    if (heightDifference !== 0) return heightDifference
+    const fpsDifference = (right.framesPerSecond ?? 0) - (left.framesPerSecond ?? 0)
+    if (fpsDifference !== 0) return fpsDifference
+    return Number(right.hasAudio) - Number(left.hasAudio)
+  })[0]
+}
+
+function getNoCompatibleFormatMessage(mediaInfo: MediaInfo, mode: OutputMode): string {
+  if (mediaInfo.contentType === 'playlist' && mediaInfo.formats.length === 0) {
+    return 'This playlist response does not include per-item formats. Playlist item inspection is not available yet.'
+  }
+  if (mediaInfo.formats.length === 0) {
+    return 'The extractor did not report any downloadable formats for this media.'
+  }
+
+  const hasSeparateVideoAndAudio =
+    mediaInfo.formats.some((format) => format.hasVideo && !format.hasAudio) &&
+    mediaInfo.formats.some((format) => format.hasAudio && !format.hasVideo)
+  const hasCombinedFormat = mediaInfo.formats.some((format) => format.hasVideo && format.hasAudio)
+
+  if (mode === 'video-audio' && hasSeparateVideoAndAudio && !hasCombinedFormat) {
+    return 'The video and audio are available as separate streams. Merging them requires FFmpeg; stream pairing is not available yet.'
+  }
+  if (mode === 'audio-only' && hasCombinedFormat) {
+    return 'Only formats containing video and audio were reported. Extracting audio alone requires FFmpeg.'
+  }
+  if (mode === 'video-only' && hasCombinedFormat) {
+    return 'Only formats containing audio were reported. Removing audio requires FFmpeg.'
+  }
+  return 'No formats reported by the extractor match this output mode.'
+}
+
 export default function App(): JSX.Element {
   const [theme, setTheme] = useState<Theme>('system')
   const [url, setUrl] = useState('')
   const [clipboardMessage, setClipboardMessage] = useState('')
   const [mediaInfo, setMediaInfo] = useState<MediaInfo | null>(null)
   const [outputMode, setOutputMode] = useState<OutputMode>('best-available')
+  const [selectedFormatId, setSelectedFormatId] = useState('')
   const [inspectionError, setInspectionError] = useState<string | null>(null)
   const [inspectionMessage, setInspectionMessage] = useState('')
   const [isInspecting, setIsInspecting] = useState(false)
@@ -186,6 +243,7 @@ export default function App(): JSX.Element {
     setIsInspecting(true)
     setMediaInfo(null)
     setOutputMode('best-available')
+    setSelectedFormatId('')
     setInspectionError(null)
     setInspectionMessage('')
 
@@ -203,6 +261,9 @@ export default function App(): JSX.Element {
       }
 
       setMediaInfo(result.data)
+      setSelectedFormatId(
+        getRecommendedFormat(result.data.formats, 'best-available')?.formatId ?? ''
+      )
       setInspectionMessage('Media information retrieved. No media was downloaded.')
     } catch {
       if (activeRequestId.current === requestId) {
@@ -233,6 +294,17 @@ export default function App(): JSX.Element {
     setClipboardMessage('')
     invalidateInspection()
   }
+
+  const handleOutputModeChange = (mode: OutputMode): void => {
+    setOutputMode(mode)
+    setSelectedFormatId(mediaInfo ? getRecommendedFormat(mediaInfo.formats, mode)?.formatId ?? '' : '')
+  }
+
+  const compatibleFormats = mediaInfo ? getCompatibleFormats(mediaInfo.formats, outputMode) : []
+  const recommendedFormat = mediaInfo
+    ? getRecommendedFormat(mediaInfo.formats, outputMode)
+    : null
+  const selectedFormat = compatibleFormats.find((format) => format.formatId === selectedFormatId) ?? null
 
   const handlePaste = async (): Promise<void> => {
     setClipboardMessage('')
@@ -698,7 +770,7 @@ export default function App(): JSX.Element {
                           variant="outline"
                           aria-pressed={isSelected}
                           disabled={!mediaInfo}
-                          onClick={() => setOutputMode(option.value)}
+                          onClick={() => handleOutputModeChange(option.value)}
                           className={`h-auto min-h-14 justify-start whitespace-normal border px-3 py-2 text-left ${
                             isSelected
                               ? 'border-[var(--color-focus)] bg-[var(--color-background-soft)]'
@@ -728,18 +800,31 @@ export default function App(): JSX.Element {
                   <label className="text-xs font-semibold uppercase tracking-widest text-[var(--color-text-subtle)]">
                     Format & quality
                   </label>
-                  <Select disabled>
-                    <SelectTrigger className="h-11 border-[var(--color-border-subtle)] bg-[var(--color-background-soft)] text-[var(--color-text-subtle)]">
-                      <SelectValue placeholder="Available after inspection" />
+                  <Select
+                    value={selectedFormatId}
+                    disabled={!mediaInfo || compatibleFormats.length === 0}
+                    onValueChange={setSelectedFormatId}
+                  >
+                    <SelectTrigger className="h-auto min-h-11 border-[var(--color-border-subtle)] bg-[var(--color-background-soft)] text-left">
+                      <SelectValue
+                        placeholder={mediaInfo ? 'No compatible formats' : 'Inspect media first'}
+                      />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="placeholder">
-                        Available after inspection
-                      </SelectItem>
+                      {compatibleFormats.map((format) => (
+                        <SelectItem key={format.formatId} value={format.formatId}>
+                          {getFormatLabel(format)}
+                          {recommendedFormat?.formatId === format.formatId ? ' · Recommended' : ''}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                   <p className="text-xs leading-relaxed text-[var(--color-text-subtle)]">
-                    Format options will be populated from the inspected media.
+                    {mediaInfo && compatibleFormats.length > 0
+                      ? `${compatibleFormats.length} format${compatibleFormats.length === 1 ? '' : 's'} match this mode. ${selectedFormat ? `Selected: ${getFormatLabel(selectedFormat)}.` : ''}${recommendedFormat ? ` Recommended: ${getFormatLabel(recommendedFormat)}.` : ''}`
+                      : mediaInfo
+                        ? getNoCompatibleFormatMessage(mediaInfo, outputMode)
+                        : 'Inspect a link to populate formats from the extractor.'}
                   </p>
                 </div>
               </CardContent>
