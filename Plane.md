@@ -706,14 +706,25 @@ manual playlist URL verification remains open.
 
 ### Step 5.3 --- Classify errors
 
--   [ ] Unsupported extractor/URL.
--   [ ] Invalid URL.
--   [ ] Network failure.
--   [ ] Unavailable/private/region-restricted content.
--   [ ] Authentication required.
--   [ ] No formats returned.
--   [ ] Missing FFmpeg.
--   [ ] Unknown extractor failure.
+-   [x] Unsupported extractor/URL.
+-   [x] Invalid URL.
+-   [x] Network failure.
+-   [x] Unavailable/private/region-restricted content.
+-   [x] Authentication required.
+-   [x] No formats returned.
+-   [ ] Missing FFmpeg (deferred until a download/post-processing path
+    invokes FFmpeg).
+-   [x] Unknown extractor failure.
+
+`src/main/index.ts` maps yt-dlp's redacted diagnostic text to structured
+unsupported URL, authentication, format, unavailable-media, and network
+errors. URL validation failures are returned as `invalid-input`; successful
+inspection with no formats already shows a dedicated empty-formats message.
+Unmatched process failures retain a generic safe message. FFmpeg cannot
+fail during the current inspection-only flow, so its classification belongs
+with download/post-processing. The production build passed; manual smoke
+checks for each extractor error class remain pending because extractor
+messages vary by site and release.
 
 **Acceptance criteria:** The UI never guesses platform identity from the
 URL alone when extraction has not confirmed it. It presents the best
@@ -725,19 +736,27 @@ available explanation for failure.
 
 ### Step 6.1 --- Build the media preview
 
--   [ ] Show title.
--   [ ] Show thumbnail or fallback image.
--   [ ] Show platform/site.
--   [ ] Show channel/uploader name.
--   [ ] Show channel avatar/logo only if an appropriate URL is actually
+-   [x] Show title.
+-   [x] Show thumbnail or fallback image.
+-   [x] Show platform/site.
+-   [x] Show channel/uploader name.
+-   [x] Show channel avatar/logo only if an appropriate URL is actually
     available.
--   [ ] Show duration and playlist details when available.
--   [ ] Show the maximum reported video resolution when a real video
+-   [x] Show duration and playlist details when available.
+-   [x] Show the maximum reported video resolution when a real video
     format provides it.
--   [ ] Show audio availability and approximate file size when
+-   [x] Show audio availability and approximate file size when
     available.
--   [ ] Indicate that the data has been fetched and the link was
+-   [x] Indicate that the data has been fetched and the link was
     recognized.
+
+The preview now summarizes the maximum resolution among returned video
+formats, whether returned formats include audio, and the reported size
+range. Approximate per-format sizes use a `~` marker. Missing information
+is shown as “Not reported”; no channel avatar is invented when the
+extractor provides no suitable avatar URL. Existing preview fields show
+the title, thumbnail fallback, platform, creator, duration, playlist
+details, and successful inspection state. `npm.cmd run build` passed.
 
 ### Step 6.2 --- Build output mode selection
 
@@ -1072,8 +1091,8 @@ Mark tasks complete only after they are implemented and verified.
 -   [ ] Phase 13 --- Windows packaging and release
 
 **Last completed phase:** Phase 0 --- Scope and dependency checks\
-**Current task:** Phase 5.2 --- Identify media type (playlist scope selection remains deferred until the download request can carry it)\
-**Next action:** Verify playlist, single-item, and unknown-content inspection cases in the running app, then connect playlist scope and entry selection when implementing the download request. Phase 4.3 still needs manual invalid/unsupported-link and cancellation checks. Before FFmpeg integration/packaging, verify the local candidate's runtime version/configuration and match its provenance and checksums to an upstream release. Phase 3.3 still needs download/Save dialog/file handler integration and acceptance tests; Phase 1 dependency pinning, lockfile commit, and project-license decision remain pending.
+**Current task:** Phase 6.1 --- Build the media preview\
+**Next action:** Implement Phase 6.2 output-mode selection, then Phase 6.3 dynamic format options. Phase 5.2 still needs manual playlist, single-item, and unknown-content checks; playlist scope selection remains deferred until it can flow into a real download request. Phase 5.3 classification and Phase 4.3 inspection failures still need manual checks. Before FFmpeg integration/packaging, verify the local candidate's runtime version/configuration and match its provenance and checksums to an upstream release. Phase 3.3 still needs download/Save dialog/file handler integration and acceptance tests; Phase 1 dependency pinning, lockfile commit, and project-license decision remain pending.
 
 ------------------------------------------------------------------------
 

@@ -55,6 +55,41 @@ function formatFileSize(bytes: number | null): string | null {
   return `${(bytes / 1_048_576).toFixed(1)} MB`
 }
 
+function getMaximumVideoResolution(formats: MediaFormat[]): string | null {
+  const heights = formats
+    .filter((format) => format.hasVideo)
+    .map((format) => {
+      if (format.height !== null) return format.height
+      const resolution = format.resolution
+      const match = resolution?.match(/(?:^|\s)(\d{3,5})p\b/i) ?? resolution?.match(/\d{2,5}x(\d{2,5})/i)
+      return match ? Number(match[1]) : null
+    })
+    .filter((height): height is number => height !== null && Number.isFinite(height) && height > 0)
+
+  return heights.length > 0 ? `${Math.max(...heights)}p` : null
+}
+
+function getFormatSizeSummary(formats: MediaFormat[]): string | null {
+  const sizedFormats = formats
+    .map((format) => ({
+      size: format.fileSizeBytes ?? format.approximateFileSizeBytes,
+      estimated: format.fileSizeBytes === null && format.approximateFileSizeBytes !== null
+    }))
+    .filter((format): format is { size: number; estimated: boolean } => format.size !== null)
+
+  if (sizedFormats.length === 0) return null
+
+  const sizes = sizedFormats.map((format) => format.size)
+  const minimum = Math.min(...sizes)
+  const maximum = Math.max(...sizes)
+  const range =
+    minimum === maximum
+      ? formatFileSize(minimum)
+      : `${formatFileSize(minimum)}–${formatFileSize(maximum)}`
+
+  return `${sizedFormats.some((format) => format.estimated) ? 'Approx. ' : ''}${range}`
+}
+
 function getFormatLabel(format: MediaFormat): string {
   const parts = [format.resolution, format.extension.toUpperCase()]
   if (format.framesPerSecond) parts.push(`${format.framesPerSecond} FPS`)
@@ -62,7 +97,10 @@ function getFormatLabel(format: MediaFormat): string {
   else if (format.hasVideo) parts.push('Video only')
   else if (format.hasAudio) parts.push('Audio only')
   const size = formatFileSize(format.fileSizeBytes ?? format.approximateFileSizeBytes)
-  if (size) parts.push(size)
+  if (size) {
+    const isEstimate = format.fileSizeBytes === null && format.approximateFileSizeBytes !== null
+    parts.push(`${isEstimate ? '~' : ''}${size}`)
+  }
   return parts.filter(Boolean).join(' · ')
 }
 
@@ -458,6 +496,28 @@ export default function App(): JSX.Element {
                             <dd>{formatDuration(mediaInfo.durationSeconds)}</dd>
                           </div>
                         )}
+                        <div className="flex gap-2">
+                          <dt className="font-medium text-[var(--color-text-subtle)]">
+                            Max video resolution
+                          </dt>
+                          <dd>{getMaximumVideoResolution(mediaInfo.formats) ?? 'Not reported'}</dd>
+                        </div>
+                        <div className="flex gap-2">
+                          <dt className="font-medium text-[var(--color-text-subtle)]">
+                            Audio
+                          </dt>
+                          <dd>
+                            {mediaInfo.formats.some((format) => format.hasAudio)
+                              ? 'Available in returned formats'
+                              : 'Not reported by extractor'}
+                          </dd>
+                        </div>
+                        <div className="flex gap-2">
+                          <dt className="font-medium text-[var(--color-text-subtle)]">
+                            Format size range
+                          </dt>
+                          <dd>{getFormatSizeSummary(mediaInfo.formats) ?? 'Not reported'}</dd>
+                        </div>
                       </dl>
                     </div>
                   </div>

@@ -54,6 +54,45 @@ function mapInspectionError(error: unknown): AppError {
         retryable: true
       }
     }
+    if (error.code === 'process-failed') {
+      const diagnostic = error.diagnostic?.toLowerCase() ?? ''
+
+      if (/unsupported url|no suitable extractor|no extractor found/.test(diagnostic)) {
+        return {
+          code: 'unsupported-url',
+          message: 'This link format is not supported by yt-dlp.',
+          retryable: false
+        }
+      }
+      if (/sign in|login required|authentication|cookies required|members.only/.test(diagnostic)) {
+        return {
+          code: 'authentication-required',
+          message: 'This media requires sign-in or authentication that is not configured.',
+          retryable: false
+        }
+      }
+      if (/requested format.*not available|no video formats|no formats found/.test(diagnostic)) {
+        return {
+          code: 'format-unavailable',
+          message: 'No downloadable formats were reported for this media.',
+          retryable: false
+        }
+      }
+      if (/private|video unavailable|has been removed|not available in your country|geo.?restricted/.test(diagnostic)) {
+        return {
+          code: 'media-unavailable',
+          message: 'This media is private, unavailable, or restricted in your region.',
+          retryable: false
+        }
+      }
+      if (/unable to download|timed? out|connection|temporary failure|name or service not known|network|http error (429|5\d\d)/.test(diagnostic)) {
+        return {
+          code: 'network-error',
+          message: 'A network error interrupted inspection. Check your connection and try again.',
+          retryable: true
+        }
+      }
+    }
   }
 
   if (error instanceof MediaInspectionError) {
