@@ -157,6 +157,14 @@ function getCompatibleFormats(formats: MediaFormat[], mode: OutputMode): MediaFo
   if (mode === 'video-only') {
     return formats.filter((format) => format.hasVideo && !format.hasAudio)
   }
+  if (mode === 'best-available') {
+    const hasSeparateAudio = formats.some((format) => format.hasAudio && !format.hasVideo)
+    return formats.filter(
+      (format) =>
+        (format.hasVideo && (format.hasAudio || hasSeparateAudio)) ||
+        (format.hasAudio && !format.hasVideo)
+    )
+  }
   return formats
 }
 
@@ -165,16 +173,19 @@ function getRecommendedFormat(formats: MediaFormat[], mode: OutputMode): MediaFo
   if (compatible.length === 0) return null
 
   if (mode === 'audio-only') return compatible[0]
-  if (mode === 'best-available' && !compatible.some((format) => format.hasVideo)) {
-    return compatible[0]
-  }
+  const videoFormats = mode === 'best-available'
+    ? compatible.filter((format) => format.hasVideo)
+    : compatible
+  const rankedFormats = videoFormats.length > 0 ? videoFormats : compatible
 
-  return [...compatible].sort((left, right) => {
+  return [...rankedFormats].sort((left, right) => {
     const heightDifference = (right.height ?? 0) - (left.height ?? 0)
     if (heightDifference !== 0) return heightDifference
     const fpsDifference = (right.framesPerSecond ?? 0) - (left.framesPerSecond ?? 0)
     if (fpsDifference !== 0) return fpsDifference
     return Number(right.hasAudio) - Number(left.hasAudio)
+      || (right.approximateFileSizeBytes ?? right.fileSizeBytes ?? 0) -
+        (left.approximateFileSizeBytes ?? left.fileSizeBytes ?? 0)
   })[0]
 }
 
@@ -371,11 +382,6 @@ export default function App(): JSX.Element {
 
   const handleStartDownload = async (): Promise<void> => {
     if (!mediaInfo || !selectedFormat || !selectedOutputPath) return
-    if (outputMode !== 'video-audio' && outputMode !== 'audio-only' && outputMode !== 'video-only') {
-      setSaveLocationMessage('Best Available downloads are coming in a later step.')
-      return
-    }
-
     setIsStartingDownload(true)
     setSaveLocationMessage('')
     try {
@@ -970,7 +976,7 @@ export default function App(): JSX.Element {
                   </Select>
                   <p className="text-xs leading-relaxed text-[var(--color-text-subtle)]">
                     {mediaInfo && compatibleFormats.length > 0
-                      ? `${compatibleFormats.length} format${compatibleFormats.length === 1 ? '' : 's'} match this mode. ${selectedFormat ? `Selected: ${getFormatLabel(selectedFormat)}.` : ''}${recommendedFormat ? ` Recommended: ${getFormatLabel(recommendedFormat)}.` : ''}`
+                      ? `${compatibleFormats.length} format${compatibleFormats.length === 1 ? '' : 's'} match this mode. ${selectedFormat ? `Selected: ${getFormatLabel(selectedFormat)}.` : ''}${recommendedFormat ? ` Recommended: ${getFormatLabel(recommendedFormat)}.` : ''}${outputMode === 'best-available' && selectedFormat?.hasVideo && !selectedFormat.hasAudio ? ' This video uses a separate audio stream and requires FFmpeg to merge.' : ''}`
                       : mediaInfo
                         ? getNoCompatibleFormatMessage(mediaInfo, outputMode)
                         : 'Inspect a link to populate formats from the extractor.'}
@@ -1030,7 +1036,7 @@ export default function App(): JSX.Element {
                     disabled={
                       !selectedOutputPath ||
                       !selectedFormat ||
-                    (outputMode !== 'video-audio' && outputMode !== 'audio-only' && outputMode !== 'video-only') ||
+                    (outputMode !== 'video-audio' && outputMode !== 'audio-only' && outputMode !== 'video-only' && outputMode !== 'best-available') ||
                       isStartingDownload ||
                       isDownloadActive
                     }
@@ -1046,7 +1052,9 @@ export default function App(): JSX.Element {
                       ? 'Download audio only'
                       : outputMode === 'video-only'
                         ? 'Download video only'
-                        : 'Download video + audio'}
+                        : outputMode === 'best-available'
+                          ? 'Download best available'
+                          : 'Download video + audio'}
                   </Button>
                   {selectedOutputPath && (
                     <p className="break-all text-xs text-[var(--color-text-muted)]" role="status">

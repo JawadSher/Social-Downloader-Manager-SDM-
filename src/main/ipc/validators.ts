@@ -210,7 +210,7 @@ export function validateDownloadRequest(
     return failure('Output extension must match the selected audio format.')
   }
   if (
-    (request.outputMode === 'audio-only' || request.outputMode === 'video-only') &&
+    (request.outputMode === 'audio-only' || request.outputMode === 'video-only' || request.outputMode === 'best-available') &&
     selected.data &&
     request.audioFormat === null &&
     outputExtension !== selected.data.extension.toLowerCase()

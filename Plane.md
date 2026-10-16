@@ -875,14 +875,22 @@ real video-only download has not been manually exercised.
 
 ### Step 8.4 --- Best Available
 
--   [ ] Define sensible format-selection rules.
--   [ ] Respect the chosen output mode.
--   [ ] Prefer a compatible output that does not require unnecessary
+-   [x] Define sensible format-selection rules.
+-   [x] Respect the chosen output mode.
+-   [x] Prefer a compatible output that does not require unnecessary
     conversion.
--   [ ] Explain when the best source streams need merging.
+-   [x] Explain when the best source streams need merging.
 
-**Acceptance criteria:** Test files are verified to match the requested
-mode.
+Best Available ranks compatible video formats by reported resolution
+and FPS, prefers a format that already includes audio when those values
+tie, and uses reported size as a final ranking signal. If video and audio
+are separate, the selected video uses the existing FFmpeg merge path and
+the UI explains the merge. When the source has no compatible video, the
+app selects an audio-only format and keeps its source format. The main
+process repeats the compatibility checks and validates the output
+extension. `npm.cmd run build` passed. Real downloads across combined,
+separate-stream, and audio-only fallback sources have not been manually
+verified, so the roadmap acceptance criteria remain pending.
 
 ------------------------------------------------------------------------
 
@@ -1130,8 +1138,8 @@ Mark tasks complete only after they are implemented and verified.
 -   [ ] Phase 13 --- Windows packaging and release
 
 **Last completed phase:** Phase 7 --- Save dialog and output filename\
-**Current task:** Phase 8.3 --- Video Only (No Audio)
-**Next action:** Manually verify Video + Audio, Audio Only, and Video Only downloads, then implement Step 8.4 (Best Available). Phase 5.2 still needs manual playlist, single-item, and unknown-content checks; playlist scope selection remains deferred until it can flow into a real download request. Phase 5.3 classification and Phase 4.3 inspection failures still need manual checks. Before bundling FFmpeg, complete the required source, checksum, and license review. Phase 1 dependency pinning, lockfile commit, and project-license decision remain pending.
+**Current task:** Phase 8.4 --- Best Available
+**Next action:** Manually verify Video + Audio, Audio Only, Video Only, and Best Available downloads across combined-stream, separate-stream, and audio-only media. Then proceed to Phase 9. Phase 5.2 playlist/content checks, Phase 5.3 and Phase 4.3 error checks remain pending. Before bundling FFmpeg, complete the required source, checksum, and license review. Phase 1 dependency pinning, lockfile commit, and project-license decision remain pending.
 
 ------------------------------------------------------------------------
 

@@ -310,7 +310,7 @@ app.whenReady().then(async () => {
           retryable: false
         })
       }
-      if (request.outputMode !== 'video-audio' && request.outputMode !== 'audio-only' && request.outputMode !== 'video-only') {
+      if (request.outputMode !== 'video-audio' && request.outputMode !== 'audio-only' && request.outputMode !== 'video-only' && request.outputMode !== 'best-available') {
         throw new DownloadRequestError({
           code: 'format-unavailable',
           message: 'Best Available downloads are not available yet.',
@@ -348,7 +348,9 @@ app.whenReady().then(async () => {
         (request.outputMode === 'audio-only' &&
           (!selectedFormat.hasAudio || selectedFormat.hasVideo)) ||
         (request.outputMode === 'video-only' &&
-          (!selectedFormat.hasVideo || selectedFormat.hasAudio))
+          (!selectedFormat.hasVideo || selectedFormat.hasAudio)) ||
+        (request.outputMode === 'best-available' &&
+          !selectedFormat.hasVideo && !selectedFormat.hasAudio)
       ) {
         throw new DownloadRequestError({
           code: 'format-unavailable',
@@ -356,12 +358,15 @@ app.whenReady().then(async () => {
             ? 'Select an audio-only format returned for this media.'
             : request.outputMode === 'video-only'
               ? 'Select a video-only format returned for this media.'
-              : 'Select a video format returned for this media.',
+              : request.outputMode === 'best-available'
+                ? 'Select a compatible format returned for this media.'
+                : 'Select a video format returned for this media.',
           retryable: false
         })
       }
       if (
-        request.outputMode === 'video-audio' &&
+        (request.outputMode === 'video-audio' ||
+          (request.outputMode === 'best-available' && selectedFormat.hasVideo)) &&
         !selectedFormat.hasAudio &&
         !latestInspection.formats.some((format) => format.hasAudio && !format.hasVideo)
       ) {
@@ -382,7 +387,8 @@ app.whenReady().then(async () => {
         result: null
       })
 
-      const download = request.outputMode === 'audio-only'
+      const download = request.outputMode === 'audio-only' ||
+        (request.outputMode === 'best-available' && !selectedFormat.hasVideo)
         ? runAudioOnlyDownload(downloadId, validated.data, selectedFormat)
         : request.outputMode === 'video-only'
           ? runVideoOnlyDownload(downloadId, validated.data, selectedFormat)
