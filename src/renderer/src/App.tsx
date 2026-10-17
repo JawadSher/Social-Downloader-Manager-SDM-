@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type JSX } from 'react'
+import { useCallback, useEffect, useRef, useState, type JSX } from 'react'
 import type {
   AudioFormat,
   DownloadProgress,
@@ -25,6 +25,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
+import { ToastNotice, type ToastKind, type ToastMessage } from '@/components/ui/toast-notice'
 import {
   Link2,
   ClipboardPaste,
@@ -237,10 +238,24 @@ export default function App(): JSX.Element {
   const [isStartingDownload, setIsStartingDownload] = useState(false)
   const [isOpeningOutput, setIsOpeningOutput] = useState<'file' | 'folder' | null>(null)
   const [completionActionMessage, setCompletionActionMessage] = useState('')
+  const [toast, setToast] = useState<ToastMessage | null>(null)
   const [inspectionError, setInspectionError] = useState<string | null>(null)
+  const [inspectionCanRetry, setInspectionCanRetry] = useState(false)
   const [inspectionMessage, setInspectionMessage] = useState('')
   const [isInspecting, setIsInspecting] = useState(false)
   const activeRequestId = useRef<string | null>(null)
+  const nextToastId = useRef(0)
+
+  const showToast = useCallback((kind: ToastKind, message: string): void => {
+    nextToastId.current += 1
+    setToast({ id: nextToastId.current, kind, message })
+  }, [])
+
+  useEffect(() => {
+    if (!toast) return
+    const timeout = window.setTimeout(() => setToast(null), toast.kind === 'success' ? 8_000 : 12_000)
+    return () => window.clearTimeout(timeout)
+  }, [toast])
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme
@@ -254,8 +269,15 @@ export default function App(): JSX.Element {
       if (status.stage === 'completed' || status.stage === 'failed' || status.stage === 'cancelled') {
         setDownloadProgress(null)
       }
+      if (status.stage === 'completed') {
+        showToast('success', 'Download complete.')
+      } else if (status.stage === 'failed') {
+        showToast('error', status.error?.message ?? 'The download failed. Try again.')
+      } else if (status.stage === 'cancelled') {
+        showToast('warning', 'Download cancelled.')
+      }
     }),
-    []
+    [showToast]
   )
 
   useEffect(() => {
@@ -281,6 +303,7 @@ export default function App(): JSX.Element {
     setSelectedOutputPath(null)
     setSaveLocationMessage('')
     setInspectionError(null)
+    setInspectionCanRetry(false)
     setInspectionMessage('')
   }
 
@@ -288,7 +311,9 @@ export default function App(): JSX.Element {
     const candidate = url.trim()
     if (!candidate) {
       setInspectionError('Enter a URL to inspect.')
+      setInspectionCanRetry(false)
       setInspectionMessage('')
+      showToast('warning', 'Enter a URL before starting inspection.')
       return
     }
 
@@ -308,6 +333,7 @@ export default function App(): JSX.Element {
     setOutputMode('best-available')
     setSelectedFormatId('')
     setInspectionError(null)
+    setInspectionCanRetry(false)
     setInspectionMessage('')
 
     try {
@@ -319,6 +345,8 @@ export default function App(): JSX.Element {
           setInspectionMessage('Inspection cancelled.')
         } else {
           setInspectionError(result.error.message)
+          setInspectionCanRetry(result.error.retryable)
+          showToast('error', result.error.message)
         }
         return
       }
@@ -332,9 +360,12 @@ export default function App(): JSX.Element {
       )
       setSelectedOutputPath(null)
       setInspectionMessage('Media information retrieved. No media was downloaded.')
+      showToast('success', 'Media information is ready.')
     } catch {
       if (activeRequestId.current === requestId) {
         setInspectionError('Inspection could not be completed. Try again.')
+        setInspectionCanRetry(true)
+        showToast('error', 'Inspection could not be completed. Try again.')
       }
     } finally {
       if (activeRequestId.current === requestId) {
@@ -355,6 +386,7 @@ export default function App(): JSX.Element {
     setSelectedAudioFormat(null)
     setSelectedOutputPath(null)
     setInspectionError(null)
+    setInspectionCanRetry(false)
     setInspectionMessage('Inspection cancelled.')
     void window.sdm.media.cancelInspection(requestId).catch(() => undefined)
   }
@@ -386,14 +418,18 @@ export default function App(): JSX.Element {
       )
       if (!result.success) {
         setSaveLocationMessage(result.error.message)
+        showToast('error', result.error.message)
       } else if (result.data === null) {
         setSaveLocationMessage('Save location selection cancelled. No download was started.')
+        showToast('warning', 'Save location selection was cancelled.')
       } else {
         setSelectedOutputPath(result.data)
-        setSaveLocationMessage('Destination selected. Downloading will be enabled in a later step.')
+        setSaveLocationMessage('Destination selected.')
+        showToast('success', 'Save destination selected.')
       }
     } catch {
       setSaveLocationMessage('The save location could not be selected. Try again.')
+      showToast('error', 'The save location could not be selected. Try again.')
     } finally {
       setIsChoosingSaveLocation(false)
     }
@@ -412,9 +448,15 @@ export default function App(): JSX.Element {
         outputPath: selectedOutputPath,
         audioFormat: outputMode === 'audio-only' ? selectedAudioFormat : null
       })
-      if (!result.success) setSaveLocationMessage(result.error.message)
+      if (!result.success) {
+        setSaveLocationMessage(result.error.message)
+        showToast('error', result.error.message)
+      } else {
+        showToast('success', 'Download started.')
+      }
     } catch {
       setSaveLocationMessage('The download could not be started. Try again.')
+      showToast('error', 'The download could not be started. Try again.')
     } finally {
       setIsStartingDownload(false)
     }
@@ -445,9 +487,13 @@ export default function App(): JSX.Element {
     setIsCancellingDownload(true)
     try {
       const result = await window.sdm.downloads.cancel(downloadStatus.downloadId)
-      if (!result.success) setSaveLocationMessage(result.error.message)
+      if (!result.success) {
+        setSaveLocationMessage(result.error.message)
+        showToast('error', result.error.message)
+      }
     } catch {
       setSaveLocationMessage('The download could not be cancelled. Try again.')
+      showToast('error', 'The download could not be cancelled. Try again.')
     } finally {
       setIsCancellingDownload(false)
     }
@@ -468,8 +514,14 @@ export default function App(): JSX.Element {
           ? target === 'file' ? 'Opened the file.' : 'Opened the containing folder.'
           : actionResult.error.message
       )
+      if (actionResult.success) {
+        showToast('success', target === 'file' ? 'Opened the completed file.' : 'Opened the download folder.')
+      } else {
+        showToast('error', actionResult.error.message)
+      }
     } catch {
       setCompletionActionMessage('The completed output could not be opened. Try again.')
+      showToast('error', 'The completed output could not be opened. Try again.')
     } finally {
       setIsOpeningOutput(null)
     }
@@ -494,6 +546,11 @@ export default function App(): JSX.Element {
 
   return (
     <div className="flex min-h-screen flex-col bg-[var(--color-background)] text-[var(--color-text)] antialiased">
+      {toast && (
+        <div className="pointer-events-none fixed inset-x-4 bottom-4 z-50 flex justify-end sm:inset-x-6">
+          <ToastNotice toast={toast} onDismiss={() => setToast(null)} />
+        </div>
+      )}
       <a
         href="#main-content"
         className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-[var(--color-surface-raised)] focus:px-3 focus:py-2 focus:text-sm focus:ring-2 focus:ring-[var(--color-focus)]"
@@ -671,9 +728,20 @@ export default function App(): JSX.Element {
 
             <div className="rounded-lg border border-dashed border-[var(--color-border)] bg-[var(--color-background-soft)] px-3 py-2.5 text-xs leading-relaxed text-[var(--color-text-muted)]">
               {inspectionError ? (
-                <p role="alert" className="font-medium text-[var(--color-danger)]">
-                  {inspectionError}
-                </p>
+                <div className="space-y-2 rounded-md border border-[var(--color-danger)]/40 bg-[var(--color-danger)]/5 p-3" role="alert">
+                  <p className="font-medium text-[var(--color-danger)]">{inspectionError}</p>
+                  {inspectionCanRetry && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={isInspecting}
+                      onClick={() => void handleInspect()}
+                    >
+                      Retry inspection
+                    </Button>
+                  )}
+                </div>
               ) : isInspecting ? (
                 <p>Fetching metadata and formats. The media itself is not downloaded.</p>
               ) : mediaInfo ? (
@@ -1208,9 +1276,22 @@ export default function App(): JSX.Element {
                         </Button>
                       )}
                       {downloadStatus.error && (
-                        <p className="mt-1 text-xs leading-relaxed text-[var(--color-text-subtle)]">
-                          {downloadStatus.error.message}
-                        </p>
+                        <div className="mt-3 space-y-2 rounded-md border border-[var(--color-danger)]/40 bg-[var(--color-danger)]/5 p-3" role="alert">
+                          <p className="text-xs leading-relaxed text-[var(--color-danger)]">
+                            {downloadStatus.error.message}
+                          </p>
+                          {downloadStatus.error.retryable && !isDownloadActive && (
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              disabled={isStartingDownload || !selectedOutputPath || !selectedFormat}
+                              onClick={() => void handleStartDownload()}
+                            >
+                              Retry download
+                            </Button>
+                          )}
+                        </div>
                       )}
                       {downloadStatus.result && (
                         <div className="mt-3 space-y-2">

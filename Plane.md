@@ -975,12 +975,21 @@ live yt-dlp/FFmpeg runs; that remains part of Phase 10.3.
 
 ### Step 10.2 --- Toast and inline errors
 
--   [ ] Add success, warning, and error toasts.
--   [ ] Add an inline error panel for errors requiring user action.
--   [ ] Add Retry only where retrying is meaningful.
--   [ ] Include "Copy error details" with redacted diagnostics if
-    useful.
--   [ ] Ensure toasts are accessible and do not disappear too quickly.
+-   [x] Add success, warning, and error toasts.
+-   [x] Add an inline error panel for errors requiring user action.
+-   [x] Add Retry only where retrying is meaningful.
+-   [x] Consider "Copy error details" with redacted diagnostics; omit it
+    because raw diagnostics are intentionally not exposed to the renderer.
+-   [x] Ensure toasts are accessible and do not disappear too quickly.
+
+Added a dismissible live toast for inspection, download, cancellation, save
+location, and file-opening outcomes. Success notices remain for 8 seconds;
+warning and error notices remain for 12 seconds. Inspection and download
+errors stay visible inline, with Retry shown only for retryable failures.
+Toasts use polite status announcements except errors, which use assertive
+announcements. Raw diagnostics are not copied or rendered.
+`npm.cmd run build` passed. UI behavior has not yet been manually checked
+with each error state.
 
 ### Step 10.3 --- Test error cases
 
@@ -1172,5 +1181,5 @@ Mark tasks complete only after they are implemented and verified.
 -   [ ] Phase 13 --- Windows packaging and release
 
 **Last completed phase:** Phase 7 --- Save dialog and output filename\
-**Current task:** Phase 10.2 --- Toast and inline errors
-**Next action:** Add accessible success, warning, and error feedback with an actionable inline error panel; then exercise the failure cases in Phase 10.3. Manual checks still pending for Phase 9.3 successful download/open actions, Phase 9.2 cancellation cleanup/process shutdown, Phase 5.2 playlist/content cases, Phase 5.3 and Phase 4.3 errors, Phase 8 mode-specific downloads, and Phase 9.1 live progress. Before bundling FFmpeg, complete the required source, checksum, and license review. Phase 1 dependency pinning, lockfile commit, and project-license decision remain pending.
+**Current task:** Phase 10.3 --- Exercise error cases
+**Next action:** Verify the listed inspection/download failure scenarios and refine messages if needed. Earlier manual checks remain pending for Phase 9.3 successful download/open actions, Phase 9.2 cancellation cleanup/process shutdown, Phase 5.2 playlist/content cases, Phase 5.3 and Phase 4.3 errors, Phase 8 mode-specific downloads, and Phase 9.1 live progress. Before bundling FFmpeg, complete the required source, checksum, and license review. Phase 1 dependency pinning, lockfile commit, and project-license decision remain pending.
