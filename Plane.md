@@ -993,18 +993,24 @@ with each error state.
 
 ### Step 10.3 --- Test error cases
 
--   [ ] Empty/invalid URL.
--   [ ] Unsupported URL.
+Automated unit coverage completed:
+
+-   [x] Empty and malformed URL validation.
+-   [x] Unsupported URL, no formats, authentication, unavailable media,
+    network diagnostic, and FFmpeg post-processing classification.
+-   [x] Requested quality and video-only format validation.
+
+Runtime checks still pending:
+
 -   [ ] Platform not identified.
--   [ ] Network timeout.
--   [ ] No available formats.
--   [ ] Requested quality unavailable.
--   [ ] Video-only stream unavailable.
--   [ ] FFmpeg missing.
--   [ ] Merge/conversion failed.
--   [ ] Save dialog cancelled.
+-   [ ] Actual yt-dlp network timeout.
+-   [ ] FFmpeg missing at runtime.
+-   [ ] Actual merge/conversion failure.
+-   [ ] Native save dialog cancelled.
 -   [ ] No write permission or disk space.
--   [ ] Download cancelled or failed.
+-   [ ] Download cancelled or failed with the bundled binaries.
+
+Added classifier and IPC validator tests. npm.cmd test passed: 2 test files, 14 tests. The unit tests verify helper-level mapping and validation only; they do not exercise the Electron dialogs, live process failures, filesystem exhaustion, or full UI recovery paths. Targeted ESLint on the added test files and classifier passed. Repository-wide `npm.cmd run lint` still fails on 26 existing errors and 3,238 warnings outside the added tests; lint cleanup is outside this roadmap step.
 
 **Acceptance criteria:** Every common failure gives the user an
 understandable next step and never reports false success.
@@ -1181,5 +1187,5 @@ Mark tasks complete only after they are implemented and verified.
 -   [ ] Phase 13 --- Windows packaging and release
 
 **Last completed phase:** Phase 7 --- Save dialog and output filename\
-**Current task:** Phase 10.3 --- Exercise error cases
-**Next action:** Verify the listed inspection/download failure scenarios and refine messages if needed. Earlier manual checks remain pending for Phase 9.3 successful download/open actions, Phase 9.2 cancellation cleanup/process shutdown, Phase 5.2 playlist/content cases, Phase 5.3 and Phase 4.3 errors, Phase 8 mode-specific downloads, and Phase 9.1 live progress. Before bundling FFmpeg, complete the required source, checksum, and license review. Phase 1 dependency pinning, lockfile commit, and project-license decision remain pending.
+**Current task:** Phase 10.3 --- Runtime error checks pending
+**Next action:** Manually verify the listed runtime failures and resulting inline/toast actions, then continue to Phase 11. Earlier manual checks remain pending for Phase 9.3 successful download/open actions, Phase 9.2 cancellation cleanup/process shutdown, Phase 5.2 playlist/content cases, Phase 5.3 and Phase 4.3 errors, Phase 8 mode-specific downloads, and Phase 9.1 live progress. Before bundling FFmpeg, complete the required source, checksum, and license review. Phase 1 dependency pinning, lockfile commit, and project-license decision remain pending.
