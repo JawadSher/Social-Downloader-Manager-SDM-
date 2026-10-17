@@ -3,6 +3,7 @@ import { mkdtemp, rm, stat, unlink } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import type { DownloadProgress, DownloadRequest, MediaFormat } from '../../../shared/contracts'
 import { getFfprobePath, getFfmpegDirectory } from '../media/binary-availability'
+import { classifyYtDlpDiagnostic } from '../media/diagnostic-classifier'
 import { runYtDlp, YtDlpProcessError } from '../media/ytdlp-service'
 import { parseYtDlpProgressLine } from './progress-parser'
 
@@ -46,6 +47,11 @@ export class DownloadRunnerError extends Error {
   constructor(
     readonly code:
       | 'ffmpeg-missing'
+      | 'unsupported-url'
+      | 'authentication-required'
+      | 'media-unavailable'
+      | 'network-error'
+      | 'internal-error'
       | 'format-unavailable'
       | 'processing-failed'
       | 'conversion-failed'
@@ -56,6 +62,43 @@ export class DownloadRunnerError extends Error {
     super(message)
     this.name = 'DownloadRunnerError'
   }
+}
+
+function mapYtDlpDownloadError(
+  error: YtDlpProcessError,
+  context: 'video' | 'audio' | 'video-only',
+  convertingAudio = false
+): DownloadRunnerError {
+  if (error.code === 'timeout') {
+    return new DownloadRunnerError('network-error', 'The download timed out. Check your connection and try again.')
+  }
+  if (error.code === 'spawn-failed' || error.code === 'invalid-request') {
+    return new DownloadRunnerError('internal-error', 'The downloader could not be started. Restart the app and try again.')
+  }
+
+  const category = classifyYtDlpDiagnostic(error.diagnostic)
+  if (category) {
+    const messages = {
+      'unsupported-url': 'This link format is not supported by yt-dlp.',
+      'authentication-required': 'This media requires sign-in or authentication that is not configured.',
+      'format-unavailable': 'The requested format is not available for this media.',
+      'media-unavailable': 'This media is private, unavailable, or restricted in your region.',
+      'network-error': 'A network error interrupted the download. Check your connection and try again.',
+      'processing-error': convertingAudio
+        ? 'Audio conversion failed. Choose another format or keep the source format.'
+        : 'Media processing failed. Check that FFmpeg is installed and try again.'
+    }
+    const code = category === 'processing-error'
+      ? convertingAudio ? 'conversion-failed' : 'processing-failed'
+      : category
+    return new DownloadRunnerError(code, messages[category])
+  }
+
+  if (convertingAudio) {
+    return new DownloadRunnerError('conversion-failed', 'Audio conversion failed. Choose another format or keep the source format.')
+  }
+  const label = context === 'video-only' ? 'video-only download' : context === 'audio' ? 'audio download' : 'media download'
+  return new DownloadRunnerError('download-failed', `The ${label} failed. Try again.`)
 }
 
 async function createTemporaryDirectory(outputPath: string, downloadId: string): Promise<string> {
@@ -163,20 +206,7 @@ export async function runVideoAudioDownload(
         await removeCancelledOutput(request.outputPath)
         throw new DownloadRunnerError('cancelled', 'Download cancelled. Partial files were removed.')
       }
-      const diagnostic = error.diagnostic?.toLowerCase() ?? ''
-      if (/ffmpeg|merger|post.?process/.test(diagnostic)) {
-        throw new DownloadRunnerError(
-          'processing-failed',
-          'Media processing failed. Check that FFmpeg is installed and try again.'
-        )
-      }
-      if (/unable to download|timed? out|connection|temporary failure|network|http error/.test(diagnostic)) {
-        throw new DownloadRunnerError(
-          'download-failed',
-          'A network or source error interrupted the download.'
-        )
-      }
-      throw new DownloadRunnerError('download-failed', 'The media download failed. Try again.')
+      throw mapYtDlpDownloadError(error, 'video')
     }
     throw new DownloadRunnerError('download-failed', 'The media download could not be completed.')
   }
@@ -271,20 +301,7 @@ export async function runAudioOnlyDownload(
         await removeCancelledOutput(request.outputPath)
         throw new DownloadRunnerError('cancelled', 'Download cancelled. Partial files were removed.')
       }
-      const diagnostic = error.diagnostic?.toLowerCase() ?? ''
-      if (/unable to download|timed? out|connection|temporary failure|network|http error/.test(diagnostic)) {
-        throw new DownloadRunnerError(
-          'download-failed',
-          'A network or source error interrupted the audio download.'
-        )
-      }
-      if (conversionFormat) {
-        throw new DownloadRunnerError(
-          'conversion-failed',
-          'Audio conversion failed. Choose another format or keep the source format.'
-        )
-      }
-      throw new DownloadRunnerError('download-failed', 'The audio download failed. Try again.')
+      throw mapYtDlpDownloadError(error, 'audio', Boolean(conversionFormat))
     }
     throw new DownloadRunnerError(
       conversionFormat ? 'conversion-failed' : 'download-failed',
@@ -374,11 +391,7 @@ export async function runVideoOnlyDownload(
         await removeCancelledOutput(request.outputPath)
         throw new DownloadRunnerError('cancelled', 'Download cancelled. Partial files were removed.')
       }
-      const diagnostic = error.diagnostic?.toLowerCase() ?? ''
-      if (/unable to download|timed? out|connection|temporary failure|network|http error/.test(diagnostic)) {
-        throw new DownloadRunnerError('download-failed', 'A network or source error interrupted the video download.')
-      }
-      throw new DownloadRunnerError('download-failed', 'The video-only download failed. Try again.')
+      throw mapYtDlpDownloadError(error, 'video-only')
     }
     throw new DownloadRunnerError('download-failed', 'The video-only download could not be completed.')
   }

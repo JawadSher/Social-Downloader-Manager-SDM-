@@ -19,6 +19,7 @@ import {
 import { registerIpcHandler } from './ipc/register-handler'
 import { checkYtDlpAvailability } from './services/media/binary-availability'
 import { inspectMedia, MediaInspectionError } from './services/media/media-inspector'
+import { classifyYtDlpDiagnostic } from './services/media/diagnostic-classifier'
 import { cancelYtDlp, clearYtDlpCancellation, YtDlpProcessError } from './services/media/ytdlp-service'
 import {
   DownloadRunnerError,
@@ -73,15 +74,39 @@ function mapDownloadError(error: unknown): AppError {
     return {
       code: error.code,
       message: error.message,
-      retryable: error.code !== 'format-unavailable' && error.code !== 'cancelled'
+      retryable: !['format-unavailable', 'unsupported-url', 'authentication-required', 'media-unavailable', 'cancelled'].includes(error.code)
     }
   }
   if (error instanceof YtDlpProcessError) {
+    if (error.code === 'cancelled') {
+      return { code: 'cancelled', message: 'Download cancelled.', retryable: false }
+    }
+    if (error.code === 'spawn-failed' || error.code === 'invalid-request') {
+      return { code: 'internal-error', message: 'The downloader could not be started. Restart the app and try again.', retryable: true }
+    }
+    const category = classifyYtDlpDiagnostic(error.diagnostic)
+    if (category) {
+      const messages = {
+        'unsupported-url': 'This link format is not supported by yt-dlp.',
+        'authentication-required': 'This media requires sign-in or authentication that is not configured.',
+        'format-unavailable': 'No downloadable formats were reported for this media.',
+        'media-unavailable': 'This media is private, unavailable, or restricted in your region.',
+        'network-error': 'A network error interrupted the download. Check your connection and try again.',
+        'processing-error': 'Media processing failed. Check that FFmpeg is available and try again.'
+      }
+      return {
+        code: category === 'processing-error' ? 'processing-failed' : category,
+        message: messages[category],
+        retryable: category === 'network-error' || category === 'processing-error'
+      }
+    }
     return {
       code: error.code === 'timeout' ? 'network-error' : 'download-failed',
       message: error.code === 'timeout'
         ? 'The download timed out. Check your connection and try again.'
-        : 'The media download failed. Try again.',
+        : error.code === 'output-limit'
+          ? 'The downloader returned too much output. Try again.'
+          : 'The media download failed. Try again.',
       retryable: true
     }
   }
@@ -145,41 +170,20 @@ function mapInspectionError(error: unknown): AppError {
       }
     }
     if (error.code === 'process-failed') {
-      const diagnostic = error.diagnostic?.toLowerCase() ?? ''
-
-      if (/unsupported url|no suitable extractor|no extractor found/.test(diagnostic)) {
-        return {
-          code: 'unsupported-url',
-          message: 'This link format is not supported by yt-dlp.',
-          retryable: false
-        }
+      const category = classifyYtDlpDiagnostic(error.diagnostic)
+      const messages = {
+        'unsupported-url': 'This link format is not supported by yt-dlp.',
+        'authentication-required': 'This media requires sign-in or authentication that is not configured.',
+        'format-unavailable': 'No downloadable formats were reported for this media.',
+        'media-unavailable': 'This media is private, unavailable, or restricted in your region.',
+        'network-error': 'A network error interrupted inspection. Check your connection and try again.',
+        'processing-error': 'Media processing failed. Check that FFmpeg is available and try again.'
       }
-      if (/sign in|login required|authentication|cookies required|members.only/.test(diagnostic)) {
+      if (category) {
         return {
-          code: 'authentication-required',
-          message: 'This media requires sign-in or authentication that is not configured.',
-          retryable: false
-        }
-      }
-      if (/requested format.*not available|no video formats|no formats found/.test(diagnostic)) {
-        return {
-          code: 'format-unavailable',
-          message: 'No downloadable formats were reported for this media.',
-          retryable: false
-        }
-      }
-      if (/private|video unavailable|has been removed|not available in your country|geo.?restricted/.test(diagnostic)) {
-        return {
-          code: 'media-unavailable',
-          message: 'This media is private, unavailable, or restricted in your region.',
-          retryable: false
-        }
-      }
-      if (/unable to download|timed? out|connection|temporary failure|name or service not known|network|http error (429|5\d\d)/.test(diagnostic)) {
-        return {
-          code: 'network-error',
-          message: 'A network error interrupted inspection. Check your connection and try again.',
-          retryable: true
+          code: category === 'processing-error' ? 'processing-failed' : category,
+          message: messages[category],
+          retryable: category === 'network-error' || category === 'processing-error'
         }
       }
     }

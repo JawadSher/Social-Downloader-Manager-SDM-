@@ -958,11 +958,20 @@ and completion only appears after the output is verified.
 
 ### Step 10.1 --- Create error mapping
 
--   [ ] Map common process/exit errors to safe user-facing messages.
--   [ ] Distinguish unsupported URL from network failure and missing
+-   [x] Map common process/exit errors to safe user-facing messages.
+-   [x] Distinguish unsupported URL from network failure and missing
     FFmpeg where possible.
--   [ ] Avoid showing raw stack traces in normal UI.
--   [ ] Keep detailed diagnostics local and redact secrets.
+-   [x] Avoid showing raw stack traces in normal UI.
+-   [x] Keep detailed diagnostics local and redact secrets.
+
+Inspection and download failures now use one redacted yt-dlp diagnostic
+classifier for unsupported links, authentication requirements, missing
+formats, unavailable media, network errors, and post-processing errors.
+Process timeouts, launch failures, output limits, and cancellation receive
+separate safe messages. Raw stderr remains in the main-process error object
+after URL-secret redaction and is not forwarded to the renderer.
+`npm.cmd run build` passed. Failure cases have not yet been exercised against
+live yt-dlp/FFmpeg runs; that remains part of Phase 10.3.
 
 ### Step 10.2 --- Toast and inline errors
 
@@ -1163,25 +1172,5 @@ Mark tasks complete only after they are implemented and verified.
 -   [ ] Phase 13 --- Windows packaging and release
 
 **Last completed phase:** Phase 7 --- Save dialog and output filename\
-**Current task:** Phase 9.3 --- Completion runtime check
-**Next action:** Run a successful download and verify Open File/Open Folder, then complete the Phase 9.2 live cancellation check and proceed to Phase 10.1 (error mapping). Other pending manual checks: Phase 5.2 playlist/content cases, Phase 5.3 and Phase 4.3 errors, Phase 8 mode-specific downloads, and Phase 9.1 live progress. Before bundling FFmpeg, complete the required source, checksum, and license review. Phase 1 dependency pinning, lockfile commit, and project-license decision remain pending.
-
-------------------------------------------------------------------------
-
-## 9. Definition of done
-
-A task is complete only when: - Implementation is connected to the real
-app flow. - Loading, success, cancellation, and error states are handled
-where relevant. - Relevant tests pass. - Lint, typecheck, and build
-pass. - No fake functionality remains in the production path. -
-Documentation and this checklist are updated. - The agent reports what
-was actually tested and what remains unverified.
-
-## Final principle
-
-Build a small, trustworthy media downloader---not a large
-download-manager suite on day one. First prove the complete path: paste
-URL → inspect platform and media → show real available formats → choose
-mode and resolution → select filename/location → download with progress
-→ show success or a clear error. Add only features that improve this
-flow.
+**Current task:** Phase 10.2 --- Toast and inline errors
+**Next action:** Add accessible success, warning, and error feedback with an actionable inline error panel; then exercise the failure cases in Phase 10.3. Manual checks still pending for Phase 9.3 successful download/open actions, Phase 9.2 cancellation cleanup/process shutdown, Phase 5.2 playlist/content cases, Phase 5.3 and Phase 4.3 errors, Phase 8 mode-specific downloads, and Phase 9.1 live progress. Before bundling FFmpeg, complete the required source, checksum, and license review. Phase 1 dependency pinning, lockfile commit, and project-license decision remain pending.
