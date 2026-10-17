@@ -1010,7 +1010,7 @@ Runtime checks still pending:
 -   [ ] No write permission or disk space.
 -   [ ] Download cancelled or failed with the bundled binaries.
 
-Added classifier and IPC validator tests. npm.cmd test passed: 2 test files, 14 tests. The unit tests verify helper-level mapping and validation only; they do not exercise the Electron dialogs, live process failures, filesystem exhaustion, or full UI recovery paths. Targeted ESLint on the added test files and classifier passed. Repository-wide `npm.cmd run lint` still fails on 26 existing errors and 3,238 warnings outside the added tests; lint cleanup is outside this roadmap step.
+Added classifier and IPC validator tests. npm.cmd test passed: 2 test files, 14 tests. The unit tests verify helper-level mapping and validation only; they do not exercise the Electron dialogs, live process failures, filesystem exhaustion, or full UI recovery paths. Structured console checkpoints were added around download startup, progress-stage changes, FFmpeg checks, yt-dlp process exit, output verification, cancellation cleanup, and final status. Diagnostic summaries redact URLs, credential headers, tokens, and local paths. Targeted ESLint on the added test files and classifier passed. Repository-wide `npm.cmd run lint` still fails on 26 existing errors and 3,238 warnings outside the added tests; lint cleanup is outside this roadmap step.
 
 **Acceptance criteria:** Every common failure gives the user an
 understandable next step and never reports false success.

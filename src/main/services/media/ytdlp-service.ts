@@ -2,6 +2,7 @@ import { spawn, type ChildProcessByStdio } from 'node:child_process'
 import type { Readable } from 'node:stream'
 import { StringDecoder } from 'node:string_decoder'
 import { getYtDlpPath } from './binary-availability'
+import { logDownloadEvent, sanitizeDiagnosticForLog } from '../downloads/download-logger'
 
 const DEFAULT_TIMEOUT_MS = 2 * 60 * 1000
 const MAX_STDOUT_BYTES = 16 * 1024 * 1024
@@ -175,12 +176,14 @@ function startYtDlpProcess(
   let child: ChildProcessByStdio<null, Readable, Readable>
 
   try {
+    logDownloadEvent(options.requestId, 'yt-dlp-spawn-requested')
     child = spawn(getYtDlpPath(), [...args], {
       windowsHide: true,
       shell: false,
       stdio: ['ignore', 'pipe', 'pipe']
     })
   } catch (error) {
+    logDownloadEvent(options.requestId, 'yt-dlp-spawn-threw', {}, 'error')
     throw new YtDlpProcessError('spawn-failed', 'yt-dlp could not be started.', null, {
       cause: error
     })
@@ -218,6 +221,15 @@ function startYtDlpProcess(
     const terminate = (error: YtDlpProcessError): void => {
       if (terminalError || settled) return
       terminalError = error
+      logDownloadEvent(
+        options.requestId,
+        'yt-dlp-termination-requested',
+        {
+          reason: error.code,
+          diagnostic: sanitizeDiagnosticForLog(error.diagnostic ?? stderr)
+        },
+        'error'
+      )
       terminateProcessTree(child)
     }
 
@@ -251,6 +263,7 @@ function startYtDlpProcess(
       if (settled || terminalError) return
       stdoutBytes += chunk.length
       if (stdoutBytes > stdoutLimit) {
+        logDownloadEvent(options.requestId, 'yt-dlp-stdout-limit-exceeded', { limitBytes: stdoutLimit }, 'error')
         terminate(
           new YtDlpProcessError(
             'output-limit',
@@ -269,6 +282,7 @@ function startYtDlpProcess(
       if (settled || terminalError) return
       stderrBytes += chunk.length
       if (stderrBytes > stderrLimit) {
+        logDownloadEvent(options.requestId, 'yt-dlp-stderr-limit-exceeded', { limitBytes: stderrLimit }, 'error')
         terminate(
           new YtDlpProcessError(
             'output-limit',
@@ -282,6 +296,12 @@ function startYtDlpProcess(
     })
 
     child.once('error', (error) => {
+      logDownloadEvent(
+        options.requestId,
+        'yt-dlp-process-error',
+        { errorCode: (error as NodeJS.ErrnoException).code ?? 'unknown' },
+        'error'
+      )
       settleError(
         new YtDlpProcessError('spawn-failed', 'yt-dlp could not be started.', null, {
           cause: error
@@ -296,10 +316,26 @@ function startYtDlpProcess(
       stderr += stderrDecoder.end()
 
       if (terminalError) {
+        logDownloadEvent(
+          options.requestId,
+          'yt-dlp-process-terminated',
+          { reason: terminalError.code, diagnostic: sanitizeDiagnosticForLog(terminalError.diagnostic) },
+          'error'
+        )
         settleError(terminalError)
         return
       }
       if (exitCode !== 0) {
+        logDownloadEvent(
+          options.requestId,
+          'yt-dlp-process-exited-nonzero',
+          {
+            exitCode: exitCode ?? -1,
+            signal: signal ?? null,
+            diagnostic: sanitizeDiagnosticForLog(stderr)
+          },
+          'error'
+        )
         settleError(
           new YtDlpProcessError(
             'process-failed',
@@ -315,6 +351,7 @@ function startYtDlpProcess(
       if (settled) return
       settled = true
       clearTimeout(timer)
+      logDownloadEvent(options.requestId, 'yt-dlp-process-exited', { exitCode: 0 })
       resolve({ stdout, stderr: redactSensitiveUrlParameters(stderr), exitCode })
     })
   })

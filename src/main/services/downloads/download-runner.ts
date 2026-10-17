@@ -4,6 +4,7 @@ import { dirname, join, resolve } from 'node:path'
 import type { DownloadProgress, DownloadRequest, MediaFormat } from '../../../shared/contracts'
 import { getFfprobePath, getFfmpegDirectory } from '../media/binary-availability'
 import { classifyYtDlpDiagnostic } from '../media/diagnostic-classifier'
+import { logDownloadEvent, sanitizeDiagnosticForLog } from './download-logger'
 import { runYtDlp, YtDlpProcessError } from '../media/ytdlp-service'
 import { parseYtDlpProgressLine } from './progress-parser'
 
@@ -65,14 +66,17 @@ export class DownloadRunnerError extends Error {
 }
 
 function mapYtDlpDownloadError(
+  downloadId: string,
   error: YtDlpProcessError,
   context: 'video' | 'audio' | 'video-only',
   convertingAudio = false
 ): DownloadRunnerError {
   if (error.code === 'timeout') {
+    logDownloadEvent(downloadId, 'yt-dlp-failure-classified', { processCode: error.code, appCode: 'network-error' }, 'error')
     return new DownloadRunnerError('network-error', 'The download timed out. Check your connection and try again.')
   }
   if (error.code === 'spawn-failed' || error.code === 'invalid-request') {
+    logDownloadEvent(downloadId, 'yt-dlp-failure-classified', { processCode: error.code, appCode: 'internal-error' }, 'error')
     return new DownloadRunnerError('internal-error', 'The downloader could not be started. Restart the app and try again.')
   }
 
@@ -91,9 +95,26 @@ function mapYtDlpDownloadError(
     const code = category === 'processing-error'
       ? convertingAudio ? 'conversion-failed' : 'processing-failed'
       : category
+    logDownloadEvent(
+      downloadId,
+      'yt-dlp-failure-classified',
+      {
+        processCode: error.code,
+        diagnosticCategory: category,
+        appCode: code,
+        diagnostic: sanitizeDiagnosticForLog(error.diagnostic)
+      },
+      'error'
+    )
     return new DownloadRunnerError(code, messages[category])
   }
 
+  logDownloadEvent(
+    downloadId,
+    'yt-dlp-failure-unclassified',
+    { processCode: error.code, diagnostic: sanitizeDiagnosticForLog(error.diagnostic) },
+    'error'
+  )
   if (convertingAudio) {
     return new DownloadRunnerError('conversion-failed', 'Audio conversion failed. Choose another format or keep the source format.')
   }
@@ -102,7 +123,9 @@ function mapYtDlpDownloadError(
 }
 
 async function createTemporaryDirectory(outputPath: string, downloadId: string): Promise<string> {
-  return mkdtemp(join(dirname(outputPath), `.sdm-download-${downloadId}-`))
+  const directory = await mkdtemp(join(dirname(outputPath), `.sdm-download-${downloadId}-`))
+  logDownloadEvent(downloadId, 'temporary-directory-created')
+  return directory
 }
 
 async function removeTemporaryDirectory(directory: string): Promise<void> {
@@ -123,12 +146,19 @@ export async function runVideoAudioDownload(
 ): Promise<VideoAudioDownloadResult> {
   const needsMerge = !format.hasAudio
   const ffmpegDirectory = getFfmpegDirectory()
+  logDownloadEvent(downloadId, 'video-audio-runner-started', {
+    formatId: format.formatId,
+    requiresMerge: needsMerge,
+    extension: format.extension
+  })
 
   if (needsMerge) {
     try {
       const ffmpegInfo = await stat(resolve(ffmpegDirectory, 'ffmpeg.exe'))
       if (!ffmpegInfo.isFile()) throw new Error('FFmpeg is not a file.')
+      logDownloadEvent(downloadId, 'ffmpeg-preflight-passed')
     } catch {
+      logDownloadEvent(downloadId, 'ffmpeg-preflight-failed', {}, 'error')
       throw new DownloadRunnerError(
         'ffmpeg-missing',
         'FFmpeg is required to combine this video with its separate audio stream.'
@@ -168,6 +198,7 @@ export async function runVideoAudioDownload(
   args.push(request.mediaUrl)
 
   try {
+    logDownloadEvent(downloadId, 'yt-dlp-download-request-started', { mode: 'video-audio' })
     const { stdout } = await runYtDlp(args, {
       requestId: downloadId,
       timeoutMs: DOWNLOAD_TIMEOUT_MS,
@@ -182,6 +213,7 @@ export async function runVideoAudioDownload(
       .at(-1)
 
     if (!reportedPath || resolve(reportedPath).toLowerCase() !== resolve(request.outputPath).toLowerCase()) {
+      logDownloadEvent(downloadId, 'yt-dlp-output-path-mismatch', {}, 'error')
       throw new DownloadRunnerError(
         'download-failed',
         'yt-dlp completed without confirming the selected output path.'
@@ -190,12 +222,14 @@ export async function runVideoAudioDownload(
 
     const outputInfo = await stat(request.outputPath)
     if (!outputInfo.isFile() || outputInfo.size <= 0) {
+      logDownloadEvent(downloadId, 'output-verification-failed', { fileSizeBytes: outputInfo.size }, 'error')
       throw new DownloadRunnerError(
         'download-failed',
         'The completed output file could not be verified.'
       )
     }
 
+    logDownloadEvent(downloadId, 'output-verified', { fileSizeBytes: outputInfo.size })
     await removeTemporaryDirectory(temporaryDirectory)
     return { outputPath: request.outputPath, fileSizeBytes: outputInfo.size }
   } catch (error) {
@@ -203,10 +237,12 @@ export async function runVideoAudioDownload(
     if (error instanceof DownloadRunnerError) throw error
     if (error instanceof YtDlpProcessError) {
       if (error.code === 'cancelled') {
+        logDownloadEvent(downloadId, 'download-cancellation-cleanup-started')
         await removeCancelledOutput(request.outputPath)
+        logDownloadEvent(downloadId, 'download-cancellation-cleanup-completed')
         throw new DownloadRunnerError('cancelled', 'Download cancelled. Partial files were removed.')
       }
-      throw mapYtDlpDownloadError(error, 'video')
+      throw mapYtDlpDownloadError(downloadId, error, 'video')
     }
     throw new DownloadRunnerError('download-failed', 'The media download could not be completed.')
   }
@@ -220,12 +256,19 @@ export async function runAudioOnlyDownload(
 ): Promise<VideoAudioDownloadResult> {
   const conversionFormat = request.audioFormat
   const ffmpegDirectory = getFfmpegDirectory()
+  logDownloadEvent(downloadId, 'audio-runner-started', {
+    formatId: format.formatId,
+    converting: Boolean(conversionFormat),
+    audioFormat: conversionFormat
+  })
 
   if (conversionFormat) {
     try {
       const ffmpegInfo = await stat(resolve(ffmpegDirectory, 'ffmpeg.exe'))
       if (!ffmpegInfo.isFile()) throw new Error('FFmpeg is not a file.')
+      logDownloadEvent(downloadId, 'ffmpeg-preflight-passed')
     } catch {
+      logDownloadEvent(downloadId, 'ffmpeg-preflight-failed', {}, 'error')
       throw new DownloadRunnerError(
         'ffmpeg-missing',
         'FFmpeg is required to convert this audio format.'
@@ -258,6 +301,7 @@ export async function runAudioOnlyDownload(
   args.push('--print', 'after_move:filepath', request.mediaUrl)
 
   try {
+    logDownloadEvent(downloadId, 'yt-dlp-download-request-started', { mode: 'audio-only' })
     const { stdout } = await runYtDlp(args, {
       requestId: downloadId,
       timeoutMs: DOWNLOAD_TIMEOUT_MS,
@@ -277,6 +321,7 @@ export async function runAudioOnlyDownload(
       .at(-1)
 
     if (!reportedPath || resolve(reportedPath).toLowerCase() !== resolve(request.outputPath).toLowerCase()) {
+      logDownloadEvent(downloadId, 'yt-dlp-output-path-mismatch', {}, 'error')
       throw new DownloadRunnerError(
         conversionFormat ? 'conversion-failed' : 'download-failed',
         'The completed output did not match the selected save path.'
@@ -285,12 +330,14 @@ export async function runAudioOnlyDownload(
 
     const outputInfo = await stat(request.outputPath)
     if (!outputInfo.isFile() || outputInfo.size <= 0) {
+      logDownloadEvent(downloadId, 'output-verification-failed', { fileSizeBytes: outputInfo.size }, 'error')
       throw new DownloadRunnerError(
         conversionFormat ? 'conversion-failed' : 'download-failed',
         'The completed audio file could not be verified.'
       )
     }
 
+    logDownloadEvent(downloadId, 'output-verified', { fileSizeBytes: outputInfo.size })
     await removeTemporaryDirectory(temporaryDirectory)
     return { outputPath: request.outputPath, fileSizeBytes: outputInfo.size }
   } catch (error) {
@@ -298,10 +345,12 @@ export async function runAudioOnlyDownload(
     if (error instanceof DownloadRunnerError) throw error
     if (error instanceof YtDlpProcessError) {
       if (error.code === 'cancelled') {
+        logDownloadEvent(downloadId, 'download-cancellation-cleanup-started')
         await removeCancelledOutput(request.outputPath)
+        logDownloadEvent(downloadId, 'download-cancellation-cleanup-completed')
         throw new DownloadRunnerError('cancelled', 'Download cancelled. Partial files were removed.')
       }
-      throw mapYtDlpDownloadError(error, 'audio', Boolean(conversionFormat))
+      throw mapYtDlpDownloadError(downloadId, error, 'audio', Boolean(conversionFormat))
     }
     throw new DownloadRunnerError(
       conversionFormat ? 'conversion-failed' : 'download-failed',
@@ -318,6 +367,10 @@ export async function runVideoOnlyDownload(
   format: MediaFormat,
   onProgress?: DownloadProgressHandler
 ): Promise<VideoAudioDownloadResult> {
+  logDownloadEvent(downloadId, 'video-only-runner-started', {
+    formatId: format.formatId,
+    extension: format.extension
+  })
   if (!format.hasVideo || format.hasAudio) {
     throw new DownloadRunnerError(
       'format-unavailable',
@@ -343,6 +396,7 @@ export async function runVideoOnlyDownload(
   ]
 
   try {
+    logDownloadEvent(downloadId, 'yt-dlp-download-request-started', { mode: 'video-only' })
     const { stdout } = await runYtDlp(args, {
       requestId: downloadId,
       timeoutMs: DOWNLOAD_TIMEOUT_MS,
@@ -352,15 +406,18 @@ export async function runVideoOnlyDownload(
     })
     const reportedPath = stdout.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).at(-1)
     if (!reportedPath || resolve(reportedPath).toLowerCase() !== resolve(request.outputPath).toLowerCase()) {
+      logDownloadEvent(downloadId, 'yt-dlp-output-path-mismatch', {}, 'error')
       throw new DownloadRunnerError('download-failed', 'The completed output did not match the selected save path.')
     }
 
     const outputInfo = await stat(request.outputPath)
     if (!outputInfo.isFile() || outputInfo.size <= 0) {
+      logDownloadEvent(downloadId, 'output-verification-failed', { fileSizeBytes: outputInfo.size }, 'error')
       throw new DownloadRunnerError('download-failed', 'The completed video file could not be verified.')
     }
 
     try {
+      logDownloadEvent(downloadId, 'video-only-stream-verification-started')
       const probeInfo = await stat(getFfprobePath())
       if (!probeInfo.isFile()) {
         throw new DownloadRunnerError('processing-failed', 'The configured ffprobe path is not a file.')
@@ -381,6 +438,7 @@ export async function runVideoOnlyDownload(
       }
     }
 
+    logDownloadEvent(downloadId, 'output-verified', { fileSizeBytes: outputInfo.size })
     await removeTemporaryDirectory(temporaryDirectory)
     return { outputPath: request.outputPath, fileSizeBytes: outputInfo.size }
   } catch (error) {
@@ -388,10 +446,12 @@ export async function runVideoOnlyDownload(
     if (error instanceof DownloadRunnerError) throw error
     if (error instanceof YtDlpProcessError) {
       if (error.code === 'cancelled') {
+        logDownloadEvent(downloadId, 'download-cancellation-cleanup-started')
         await removeCancelledOutput(request.outputPath)
+        logDownloadEvent(downloadId, 'download-cancellation-cleanup-completed')
         throw new DownloadRunnerError('cancelled', 'Download cancelled. Partial files were removed.')
       }
-      throw mapYtDlpDownloadError(error, 'video-only')
+      throw mapYtDlpDownloadError(downloadId, error, 'video-only')
     }
     throw new DownloadRunnerError('download-failed', 'The video-only download could not be completed.')
   }

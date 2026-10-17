@@ -27,6 +27,7 @@ import {
   runVideoAudioDownload,
   runVideoOnlyDownload
 } from './services/downloads/download-runner'
+import { logDownloadEvent } from './services/downloads/download-logger'
 
 let latestInspection: { url: string; formats: MediaFormat[] } | null = null
 let authorizedOutputPath: string | null = null
@@ -62,6 +63,9 @@ function createThrottledProgressPublisher(downloadId: string): (progress: Downlo
   return (progress) => {
     const now = Date.now()
     if (progress.stage === lastStage && now - lastSentAt < 150) return
+    if (progress.stage !== lastStage) {
+      logDownloadEvent(downloadId, 'progress-stage', { stage: progress.stage })
+    }
     lastSentAt = now
     lastStage = progress.stage
     publishDownloadProgress({ ...progress, downloadId })
@@ -416,6 +420,12 @@ app.whenReady().then(async () => {
       activeDownloadId = downloadId
       completedOutputPath = null
       authorizedOutputPath = null
+      logDownloadEvent(downloadId, 'download-started', {
+        mode: request.outputMode,
+        formatId: selectedFormat.formatId,
+        hasVideo: selectedFormat.hasVideo,
+        hasAudio: selectedFormat.hasAudio
+      })
       publishDownloadStatus({
         downloadId,
         stage: 'preparing',
@@ -433,6 +443,7 @@ app.whenReady().then(async () => {
       void download
         .then((result) => {
           completedOutputPath = result.outputPath
+          logDownloadEvent(downloadId, 'download-completed', { fileSizeBytes: result.fileSizeBytes })
           publishDownloadStatus({
             downloadId,
             stage: 'completed',
@@ -442,6 +453,12 @@ app.whenReady().then(async () => {
         })
         .catch((error: unknown) => {
           const appError = mapDownloadError(error)
+          logDownloadEvent(
+            downloadId,
+            appError.code === 'cancelled' ? 'download-cancelled' : 'download-failed',
+            { errorCode: appError.code, retryable: appError.retryable },
+            appError.code === 'cancelled' ? 'info' : 'error'
+          )
           publishDownloadStatus({
             downloadId,
             stage: appError.code === 'cancelled' ? 'cancelled' : 'failed',
@@ -464,7 +481,9 @@ app.whenReady().then(async () => {
     (event) => event.senderFrame === event.sender.mainFrame && isInternalUrl(event.senderFrame.url),
     parseRequestIdArgs,
     (downloadId) => {
+      logDownloadEvent(downloadId, 'download-cancel-requested')
       if (downloadId !== activeDownloadId || !cancelYtDlp(downloadId, true)) {
+        logDownloadEvent(downloadId, 'download-cancel-rejected', {}, 'error')
         throw new DownloadRequestError({
           code: 'invalid-input',
           message: 'This download is no longer active.',
