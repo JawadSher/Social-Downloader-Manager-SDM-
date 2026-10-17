@@ -934,13 +934,20 @@ file cleanup and that no yt-dlp/FFmpeg child remains.
 
 ### Step 9.3 --- Completion
 
--   [ ] Show "Download complete."
--   [ ] Show the final file name.
--   [ ] Add Open File.
--   [ ] Add Open Folder.
--   [ ] Keep the completion state in memory only while the current app
+-   [x] Show "Download complete." after the runner verifies the output.
+-   [x] Show the final file name and saved path.
+-   [x] Add Open File, restricted to the latest verified output.
+-   [x] Add Open Folder, opening the containing folder of that output.
+-   [x] Keep the completion state in memory only while the current app
     session needs it.
--   [ ] Do not add the result to a persistent history.
+-   [x] Do not add the result to a persistent history.
+
+The completion view uses the runner's verified result, and the main process
+allows open actions only for that in-memory output path. Both actions are
+explicit user clicks; downloaded files are never run automatically.
+`npm.cmd run build` passed. Runtime download and open-action behavior still
+needs a manual app check. The separate Phase 9.2 live cancellation check is
+also still pending.
 
 **Acceptance criteria:** Progress stays responsive, cancellation works,
 and completion only appears after the output is verified.
@@ -1156,8 +1163,8 @@ Mark tasks complete only after they are implemented and verified.
 -   [ ] Phase 13 --- Windows packaging and release
 
 **Last completed phase:** Phase 7 --- Save dialog and output filename\
-**Current task:** Phase 9.2 --- Cancel behavior
-**Next action:** Run a live cancellation check and confirm partial-file cleanup and process-tree shutdown, then implement Phase 9.3 (Completion). Manual checks remain pending for Phase 5.2 playlist/content cases, Phase 5.3 and Phase 4.3 errors, Phase 8 mode-specific downloads, and Phase 9.1 live progress. Before bundling FFmpeg, complete the required source, checksum, and license review. Phase 1 dependency pinning, lockfile commit, and project-license decision remain pending.
+**Current task:** Phase 9.3 --- Completion runtime check
+**Next action:** Run a successful download and verify Open File/Open Folder, then complete the Phase 9.2 live cancellation check and proceed to Phase 10.1 (error mapping). Other pending manual checks: Phase 5.2 playlist/content cases, Phase 5.3 and Phase 4.3 errors, Phase 8 mode-specific downloads, and Phase 9.1 live progress. Before bundling FFmpeg, complete the required source, checksum, and license review. Phase 1 dependency pinning, lockfile commit, and project-license decision remain pending.
 
 ------------------------------------------------------------------------
 

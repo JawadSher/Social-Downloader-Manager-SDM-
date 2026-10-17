@@ -1,6 +1,6 @@
 import { app, dialog, shell, BrowserWindow } from 'electron'
 import { randomUUID } from 'node:crypto'
-import { join } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
@@ -12,6 +12,7 @@ import {
   parseRequestIdArgs,
   parseSaveDialogArgs,
   parseDownloadStartArgs,
+  parseFilePathArgs,
   validateDownloadRequest,
   validateSelectedSavePath
 } from './ipc/validators'
@@ -29,6 +30,7 @@ import {
 let latestInspection: { url: string; formats: MediaFormat[] } | null = null
 let authorizedOutputPath: string | null = null
 let activeDownloadId: string | null = null
+let completedOutputPath: string | null = null
 
 class DownloadRequestError extends Error {
   constructor(readonly appError: AppError) {
@@ -86,6 +88,15 @@ function mapDownloadError(error: unknown): AppError {
   return {
     code: 'download-failed',
     message: 'The media download failed. Try again.',
+    retryable: true
+  }
+}
+
+function mapFileActionError(error: unknown): AppError {
+  if (error instanceof DownloadRequestError) return error.appError
+  return {
+    code: 'destination-error',
+    message: 'The selected file or folder could not be opened.',
     retryable: true
   }
 }
@@ -399,6 +410,7 @@ app.whenReady().then(async () => {
 
       const downloadId = 'download-' + randomUUID()
       activeDownloadId = downloadId
+      completedOutputPath = null
       authorizedOutputPath = null
       publishDownloadStatus({
         downloadId,
@@ -416,6 +428,7 @@ app.whenReady().then(async () => {
           : runVideoAudioDownload(downloadId, validated.data, selectedFormat, reportProgress)
       void download
         .then((result) => {
+          completedOutputPath = result.outputPath
           publishDownloadStatus({
             downloadId,
             stage: 'completed',
@@ -455,6 +468,61 @@ app.whenReady().then(async () => {
         })
       }
     }
+  )
+
+  const requireCompletedOutput = (requestedPath: string, expectedPath: string): string => {
+    if (!completedOutputPath || resolve(requestedPath).toLowerCase() !== resolve(expectedPath).toLowerCase()) {
+      throw new DownloadRequestError({
+        code: 'invalid-input',
+        message: 'Only the most recently completed download can be opened.',
+        retryable: false
+      })
+    }
+    return requestedPath
+  }
+
+  registerIpcHandler(
+    IPC_CHANNELS.filesOpenFile,
+    (event) => event.senderFrame === event.sender.mainFrame && isInternalUrl(event.senderFrame.url),
+    parseFilePathArgs,
+    async (requestedPath) => {
+      const filePath = requireCompletedOutput(requestedPath, completedOutputPath as string)
+      const openError = await shell.openPath(filePath)
+      if (openError) {
+        throw new DownloadRequestError({
+          code: 'destination-error',
+          message: 'The completed file could not be opened with its default application.',
+          retryable: true
+        })
+      }
+    },
+    mapFileActionError
+  )
+
+  registerIpcHandler(
+    IPC_CHANNELS.filesOpenFolder,
+    (event) => event.senderFrame === event.sender.mainFrame && isInternalUrl(event.senderFrame.url),
+    parseFilePathArgs,
+    async (requestedPath) => {
+      if (!completedOutputPath) {
+        throw new DownloadRequestError({
+          code: 'invalid-input',
+          message: 'There is no completed download to open yet.',
+          retryable: false
+        })
+      }
+      requireCompletedOutput(requestedPath, completedOutputPath)
+      const folderPath = dirname(completedOutputPath)
+      const openError = await shell.openPath(folderPath)
+      if (openError) {
+        throw new DownloadRequestError({
+          code: 'destination-error',
+          message: 'The download folder could not be opened.',
+          retryable: true
+        })
+      }
+    },
+    mapFileActionError
   )
 
   createWindow()

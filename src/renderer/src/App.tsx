@@ -92,6 +92,10 @@ function formatDuration(seconds: number | null): string | null {
     : `${minutes}:${String(remainder).padStart(2, '0')}`
 }
 
+function getOutputFileName(outputPath: string): string {
+  return outputPath.split(/[\\/]/).filter(Boolean).at(-1) ?? outputPath
+}
+
 function formatFileSize(bytes: number | null): string | null {
   if (bytes === null || !Number.isFinite(bytes) || bytes < 0) return null
   if (bytes < 1_048_576) return `${(bytes / 1_024).toFixed(0)} KB`
@@ -231,6 +235,8 @@ export default function App(): JSX.Element {
   const [downloadProgress, setDownloadProgress] = useState<DownloadProgress | null>(null)
   const [isCancellingDownload, setIsCancellingDownload] = useState(false)
   const [isStartingDownload, setIsStartingDownload] = useState(false)
+  const [isOpeningOutput, setIsOpeningOutput] = useState<'file' | 'folder' | null>(null)
+  const [completionActionMessage, setCompletionActionMessage] = useState('')
   const [inspectionError, setInspectionError] = useState<string | null>(null)
   const [inspectionMessage, setInspectionMessage] = useState('')
   const [isInspecting, setIsInspecting] = useState(false)
@@ -444,6 +450,28 @@ export default function App(): JSX.Element {
       setSaveLocationMessage('The download could not be cancelled. Try again.')
     } finally {
       setIsCancellingDownload(false)
+    }
+  }
+
+  const handleOpenCompletedOutput = async (target: 'file' | 'folder'): Promise<void> => {
+    const result = downloadStatus?.result
+    if (downloadStatus?.stage !== 'completed' || !result || isOpeningOutput) return
+
+    setIsOpeningOutput(target)
+    setCompletionActionMessage('')
+    try {
+      const actionResult = target === 'file'
+        ? await window.sdm.files.openFile(result.outputPath)
+        : await window.sdm.files.openFolder(result.outputPath)
+      setCompletionActionMessage(
+        actionResult.success
+          ? target === 'file' ? 'Opened the file.' : 'Opened the containing folder.'
+          : actionResult.error.message
+      )
+    } catch {
+      setCompletionActionMessage('The completed output could not be opened. Try again.')
+    } finally {
+      setIsOpeningOutput(null)
     }
   }
 
@@ -1185,9 +1213,43 @@ export default function App(): JSX.Element {
                         </p>
                       )}
                       {downloadStatus.result && (
-                        <p className="mt-1 break-all text-xs leading-relaxed text-[var(--color-text-subtle)]">
-                          Saved to {downloadStatus.result.outputPath}
-                        </p>
+                        <div className="mt-3 space-y-2">
+                          <p className="break-all text-xs font-medium text-[var(--color-text)]">
+                            {getOutputFileName(downloadStatus.result.outputPath)}
+                          </p>
+                          <p className="break-all text-xs leading-relaxed text-[var(--color-text-subtle)]">
+                            Saved to {downloadStatus.result.outputPath}
+                          </p>
+                          {downloadStatus.stage === 'completed' && (
+                            <div className="flex flex-wrap gap-2 pt-1">
+                              <Button
+                                type="button"
+                                size="sm"
+                                disabled={isOpeningOutput !== null}
+                                onClick={() => void handleOpenCompletedOutput('file')}
+                              >
+                                {isOpeningOutput === 'file' && <LoaderCircle className="mr-2 size-4 animate-spin" />}
+                                Open File
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                disabled={isOpeningOutput !== null}
+                                onClick={() => void handleOpenCompletedOutput('folder')}
+                              >
+                                {isOpeningOutput === 'folder' && <LoaderCircle className="mr-2 size-4 animate-spin" />}
+                                <FolderOpen className="mr-2 size-4" />
+                                Open Folder
+                              </Button>
+                            </div>
+                          )}
+                          {completionActionMessage && (
+                            <p className="text-xs text-[var(--color-text-subtle)]" role="status">
+                              {completionActionMessage}
+                            </p>
+                          )}
+                        </div>
                       )}
                     </>
                   ) : (
